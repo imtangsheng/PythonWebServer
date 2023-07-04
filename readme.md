@@ -134,3 +134,17 @@ def get_by_id(self, id):
 这种方式可以更清晰地将路由、服务和模型分离,使代码保持高内聚、低耦合。同时根据请求和响应模型,生成自动的API文档和Schema验证。
 
 ```
+
+
+# 安全第一步登录模块
+
+```
+pip install python-multipart
+pip install python-jose[cryptography]
+pip install passlib[bcrypt]
+
+# to get a string like this run in git bash:
+# openssl rand -hex 32
+
+```
+

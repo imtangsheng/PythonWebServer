@@ -14,6 +14,26 @@ import uvicorn
 from fastapi import FastAPI, Depends, status, Request, Response, HTTPException
 app = FastAPI()
 
+from fastapi.responses import HTMLResponse
+
+class LastError(BaseModel):
+    code: int
+    message: str
+
+LastError = LastError(code=0, message="")
+
+def generate_html_response():
+    html_content = """
+    <html>
+        <head>
+            <title>Some HTML in here</title>
+        </head>
+        <body>
+            <h1>Look ma! HTML!</h1>
+        </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content, status_code=200)
 
 # 1. 定义请求和响应模型
 # 使用Pydantic模型定义请求和响应的JSON schema:
@@ -196,6 +216,10 @@ class RobotService(ItemModelServic):
     point = RobotPoint(position=pose, isNew=False, cpx=0, cpy=0)
     realtime_task = RobotRealtimeTask(loopTime=0, points=[point], mode="")
 
+    # 获取机器人配置参数等的信息
+    def config_get(self):
+        config = {"battery": 100, "speed": 0.5, "mode": 0, "map": "map1"}
+        return config
     #  获取机器人位置信息
     def pose_get(self):
         return self.pose
@@ -211,12 +235,17 @@ class RobotService(ItemModelServic):
     # 获取机器人任务点信息
 
 
-FRobotService = RobotService()
+GRobotService = RobotService()
 
 # 3. 定义路由函数
 # 路由函数调用服务方法,并返回响应模型:
 Authorization = "dc123456"
 
+# 定义初始界面，显示说明文档内容
+@app.get("/")
+async def root():
+    with open("api.html",encoding='utf-8') as f:
+        return HTMLResponse(content=f.read(), status_code=200)
 
 @app.post("/user/login")
 async def user_login(user: ItemRequestUserInput):
@@ -241,17 +270,31 @@ async def set_vision_pose(pose: GVisionService.VisionPose):
     return ItemResponseResult(status=True, code=0, message="Set vision pose success", data={})
 
 
+# 获取机器人参数配置等的信息
+@app.get("/user/robot/config")
+async def get_robot_config():
+    return ItemResponseResult(status=True, code=0, message="Get robot config success", data={"config": GRobotService.config_get()})
+
 @app.get("/user/robot/pose")
 async def get_robot_pose():
-    return ItemResponseResult(status=True, code=0, message="Get robot pose success", data={"pose": FRobotService.pose_get()})
+    return ItemResponseResult(status=True, code=0, message="Get robot pose success", data={"pose": GRobotService.pose_get()})
 
 
 @app.post("/user/robot/pose")
-async def set_robot_pose(pose: FRobotService.RobotPose):
-    FRobotService.pose_set(pose.x, pose.y, pose.theta)
-    return ItemResponseResult(status=True, code=0, message="Set robot pose success.", data={"pose": FRobotService.pose})
+async def set_robot_pose(pose: GRobotService.RobotPose):
+    GRobotService.pose_set(pose.x, pose.y, pose.theta)
+    return ItemResponseResult(status=True, code=0, message="Set robot pose success.", data={"pose": GRobotService.pose})
 
+# 获取地图任务路径信息
+@app.get("/user/robot/task")
+async def get_robot_task():
+    return ItemResponseResult(status=True, code=0, message="Get robot task success", data={"task": GRobotService.task})
 
+# 设置地图任务路径信息
+@app.post("/user/robot/task")
+async def set_robot_task(task: GRobotService.RobotTask):
+    GRobotService.task_set(task)
+    return ItemResponseResult(status=True, code=0, message="Set robot task success", data={"task": GRobotService.task})
 # 执行用户发送的指令code，数据格式为json
 @app.post("/user/beta")
 async def user_beta(request: ItemRequest):
@@ -296,6 +339,113 @@ async def user_command(command: ItemRequestUserCommand):
 # def get_by_id(self, id):
 #     item = 1  # 获取对应ID项
 #     return ItemResponse(**item)
+
+from datetime import datetime, timedelta
+from typing import Union
+
+from fastapi import Depends, FastAPI, HTTPException, status, Header
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from pydantic import BaseModel
+
+# Union与 Optional 的区别是:
+# - Union[X, None] 表示参数可以传 类型X 或 None。
+# - Optional[X] 只表示参数可以传 类型X 或省略,但解析时的值还是 类型X 。
+# 用户管理模块，用户认证吗，权限管理
+# to get a string like this run in git bash:
+# openssl rand -hex 32
+# e5d05487248b25c0c95b1d36598a202b3b4bda99d555d31aefc3dddcfb1ad7e6
+SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
+ALGORITHM = "HS256"
+# ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_HOURS = 24
+
+class UserManage:
+    
+    class UserInput(BaseModel):
+        username: str
+        password: str
+
+
+    users_db = {
+        "johndoe": {
+            "username": "johndoe",
+            "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+            "disabled": False,
+        },
+        "admin": {
+            "username": "admin",
+            "hashed_password": "$2b$12$OjIKA8m6ATXNZCbkljUYz.v3nwF/zuKOTj5twpoOv2uX6a.NAF6Bu",
+            "disabled": False,
+        }
+    }
+
+    # 用户名验证
+    def username_verify(self, username: str)->bool:
+        if username in self.users_db:
+            return True
+        else:
+            LastError.code = 1
+            LastError.message = "用户名不存在"
+            return False
+    # 用户密码验证
+    def password_verify(self, username: str, password: str)->str:
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        # pwd_context.hash("dc123456")
+        user = self.users_db.get(username)
+        if user:
+            self.user_current_id = user.get("username")
+            if pwd_context.verify(password, user.get("hashed_password")):
+                return self._create_access_token()
+            else:
+                LastError.code = 1
+                LastError.message = "密码错误"
+                return False
+        return False
+
+    # 生成token
+    def _create_access_token(self)->bool:  
+        to_encode = {"sub": self.user_current_id} 
+        expire = datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+        to_encode.update({"exp": expire})    
+        self.user_token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)  
+        return True 
+
+    # 验证token
+    def get_current_user(self, token: str):
+        credentials_exception = HTTPException(status_code=400, detail="Incorrect token")
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])    
+            username: str = payload.get("sub")
+            if username is None:
+                raise credentials_exception
+        except JWTError:
+            raise credentials_exception
+        return username
+
+GUserManage = UserManage()
+
+
+# 用户登录获取token
+@app.post("/login")
+async def login_for_access_token(user: UserManage.UserInput):
+    if not GUserManage.username_verify(user.username):
+        raise HTTPException(status_code=400, detail="Incorrect username")
+    if not GUserManage.password_verify(user.username, user.password):
+        raise HTTPException(status_code=400, detail="Incorrect password")
+    return ItemResponseResult(status=True, code=0, message="Login Success", data={"token": GUserManage.user_token})
+
+
+
+# 获取登录用户信息
+@app.get("/login/me")
+async def read_users_me(token:str = Header("token")):
+    username = GUserManage.get_current_user(token)
+    if username:
+        return {"username": username}
+    else:
+        raise HTTPException(status_code=400, detail="Incorrect token")
 
 
 if __name__ == "__main__":
