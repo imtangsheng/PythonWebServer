@@ -26,14 +26,15 @@ app_decription = """
 注：GET方法返回的数据即使POST修改提交的数据格式也是一样的。
 
 ## 2023-07-11 更新说明
+    1.请求接口数据统一格式，{方法：数据}，参考示例
+    2.所有模块的配置方法，增加删除更新的方法
+    
+## 2023-07-11 更新说明
     1.云台的控制接口增加了一个参数，接收控制云台的指令
     2.每个模块分别增加了一个请求方法以获取配置信息
     3.用户模块的配置添加删除更新方法
     
-
-
 ## 2023-07-7 更新说明
-
     1.更新了通用响应模型返回的数据格式
     2.增加了新的请求方法，机器人任务的增加，删除方法
     3.增加了一个接口，用于获取机器人的状态信息
@@ -604,7 +605,7 @@ GVisionSetting = { # 视觉模块1号
             ],
             "file_path": {
                 "video": "D:\\DCRobot\\video",
-                "img": "D:\\DCRobot\\image"
+                "image": "D:\\DCRobot\\image"
             }
 }
 class VisionManage:
@@ -629,7 +630,7 @@ class VisionManage:
         self.username = base.username
         self.password = base.password
 
-        # self.setting: Dict[str, VisionSetting] = {self.ip: VisionSetting(**GVisionSetting)}
+        # self.setting: dict = VisionSetting(**GVisionSetting).dict()
 
     def login(self,base: VisionBase = VisionBase()) -> bool:
         # 登录设备
@@ -640,15 +641,22 @@ class VisionManage:
         return True
     def get_config(self) -> bool:
         # 获取配置信息
+        self.setting: dict = VisionSetting(**GVisionSetting).dict()
         return True
-    def set_config(self, setting: VisionSetting) -> bool:
+    def set_config(self, setting:dict) -> bool:
         # 设置配置信息
-        self.setting = setting
-        return True
-    def update_config(self,setting:VisionSetting) -> bool:
+        GVisionSetting = setting
+        if self.get_config():
+            return True
+        return False
+    def update_config(self,setting:dict) -> bool:
         # 更新配置信息
-        # self.setting.update(setting)
-        return True
+        for key in setting.keys():
+            if key in GVisionSetting.keys():
+                GVisionSetting[key] = setting[key]
+        if self.get_config():
+            return True
+        return False
     def get_pose(self,lChannel: int = 1) -> bool:
         #  获取摄像头云台位置信息
         self.pose.lChannel = lChannel
@@ -719,10 +727,10 @@ async def vision_get_config(ip:str = Body("192.168.1.64")) -> ResponseReturn:
     return ResponseReturn(status=False, code=LastError, message=LastError.message, data=LastError)
 
 @app.post("/user/vision/config", summary="设置视觉模块的配置", tags=["视觉管理"],include_in_schema=False)
-async def vision_set_config(setting: VisionSetting,ip:str = Body("192.168.1.64")) -> ResponseReturn:
+async def vision_set_config(config: dict = Body(),ip:str = Body("192.168.1.64")) -> ResponseReturn:
     """## 设置视觉模块的配置
     - 参数：
-        - VisionSetting 配置信息
+        - config: dict 配置信息
         - ip: str = "", 设备ip地址(非必须)
     - 示例：
         - {"config":VisionSetting,"ip":"192.168.1.64"}
@@ -734,14 +742,37 @@ async def vision_set_config(setting: VisionSetting,ip:str = Body("192.168.1.64")
         return ResponseReturn(status=True, code=0, message="Set vision config success", data={'config': GVisionManage.setting})
     return ResponseReturn(status=False, code=LastError, message=LastError.message, data=LastError)
 
-@app.post("/user/vision/config/update", summary="更新视觉模块的配置", tags=["视觉管理"],include_in_schema=False)
-async def vision_update_config(config: VisionSetting,ip:str = Body("192.168.1.64")) -> ResponseReturn:
+@app.post("/user/vision/config/update", summary="更新视觉模块的配置", tags=["视觉管理"])
+async def vision_update_config(config: dict = Body(),ip:str = Body("192.168.1.64")) -> ResponseReturn:
     """## 更新视觉模块的配置
     - 参数：
-        - VisionSetting 配置信息
+        - config: dict  配置信息(**更新传入的键值**，比如传入command或者file_path)
         - ip: str = "", 设备ip地址(非必须)
     - 示例：
-        - {"config":VisionSetting,"ip":"192.168.1.64"}
+        ```json    
+        {"config": 
+            {
+                "command": 
+                    [
+                        {
+                            "name": "可见光拍照",
+                            "description": "可见光拍照",
+                            "code": "capture",
+                            "data": 
+                                {
+                                    "lChannel": 1,
+                                    "sPicFileName": "%日期+可见光拍照.jpg"
+                                }
+                        }
+                    ],
+                "file_path": 
+                    {
+                        "video": "D:/DRobot/video/",
+                        "image": "D:/DRobot/image/"
+                    }
+            },
+        "ip":"192.168.1.64"
+        }
     - 返回：
         - {'config':VisionSetting} 配置信息
     """
@@ -1189,7 +1220,7 @@ class RobotManage:
     status = RobotStatus()
     logs: List[RobotLog] = [RobotLog()]
 
-    setting: dict = RobotSetting(**GRobotSetting).dict()
+    # setting: dict = RobotSetting(**GRobotSetting).dict()
 
     def __init__(self, ip: str = "192.168.1.68", port: int = 8880, username: str = "admin", password: str = "dc123456"):
         # 初始化机器人管理类
@@ -1198,6 +1229,7 @@ class RobotManage:
         self.username = username
         self.password = password
         # self.Authorization = self.login()
+        self.setting: dict = RobotSetting(**GRobotSetting).dict()
     
     def login(self,base:RobotBase = RobotBase())->bool:
         # 登录设备
@@ -1209,13 +1241,19 @@ class RobotManage:
 
     def get_config(self) -> bool:
         # 获取机器人配置信息
+        self.setting: dict = RobotSetting(**GRobotSetting).dict()
         return True
     def set_config(self,config:RobotSetting)->bool:
         # 设置机器人配置信息
         return True
-    def update_config(self,config:RobotSetting)->bool:
+    def update_config(self,setting:dict)->bool:
         # 更新机器人配置信息
-        return True
+        for key in setting.keys():
+            if key in GRobotSetting.keys():
+                GRobotSetting[key] = setting[key]
+        if self.get_config():
+            return True
+        return False
     def get_status(self) -> bool:
         # 获取机器人状态信息
         return True
@@ -1289,7 +1327,7 @@ GRobotManage = RobotManage()
 
 @app.post("/user/robot/login", summary="登录机器人", tags=["机器人管理"])
 async def robot_login(base: RobotBase = RobotBase()) -> ResponseReturn:
-    """# 登录机器人
+    """## 登录机器人
     - 参数：
         - base: RobotBase 机器人
             - ip: str 机器人ID
@@ -1307,7 +1345,7 @@ async def robot_login(base: RobotBase = RobotBase()) -> ResponseReturn:
 
 @app.get("/user/robot/config", summary="获取机器人配置信息", tags=["机器人管理"])
 async def robot_get_config(ip:str = Body("1")) -> ResponseReturn:
-    """# 获取机器人配置信息
+    """## 获取机器人配置信息
     - 参数：
         - ip: str 机器人ip (可不填)
         - 示例：
@@ -1320,10 +1358,58 @@ async def robot_get_config(ip:str = Body("1")) -> ResponseReturn:
         return ResponseReturn(status=True, code=0, message="Get robot config success.", data={"config":GRobotManage.setting})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
+@app.post("/user/robot/config/update", summary="更新机器人配置信息", tags=["机器人管理"])
+async def robot_update_config(config: dict = Body(),ip:str = Body("1")) -> ResponseReturn:
+    """## 更新机器人配置信息
+    - 参数：
+        - config: dict 机器人配置信息
+        - ip: str 机器人ip (可不填)
+    - 示例：
+    ```json
+        {
+            "config":{
+                "curisePoints":[
+                    {
+                        "name":"巡航点设置1",
+                        "position":{
+                            "x":0,
+                            "y":0,
+                            "theta":0
+                        },
+                        "vision":[
+                            {
+                                "name":"云台指令1",
+                                "commad":"指令1",
+                                "time":10#等待时间间隔
+                            },
+                            {
+                                "name":"云台指令2",
+                                "commad":"指令2",
+                                "time":10#等待时间间隔
+                            }
+                        ],
+                        "curiseFlag":True,#巡航开关
+                        "LightFlag":True,#灯光开关
+                        "remark":"巡航设置备注1"  
+                    }
+                ]
+            },
+            "ip":"192.168.1.10"
+        }
+    ```
+    - 返回：
+        - {"config":RobotSetting 机器人配置信息}
+    """
+    LastError = LastErrorBase()
+    if GRobotManage.update_config(config):
+        return ResponseReturn(status=True, code=0, message="Update robot config success.", data={"config":GRobotManage.setting})
+    return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
+
 @app.get("/user/robot/status", summary="获取机器人状态相关的信息", tags=["机器人管理"])
 async def robot_get_status(ip:str = Body("1")) -> ResponseReturn:
-    """# 获取机器人状态相关的信息
+    """## 获取机器人状态相关的信息
     - 参数：
+        - ip: str 机器人ip (可不填)
     - 返回：
         - {"status":RobotStatus 机器人状态信息}
     """
@@ -1334,9 +1420,10 @@ async def robot_get_status(ip:str = Body("1")) -> ResponseReturn:
 
 
 @app.get("/user/robot/pose", summary="获取机器人位置信息", tags=["机器人管理"])
-async def robot_get_pose(base: RobotBase = RobotBase()) -> ResponseReturn:
-    """# 获取机器人位置信息
-        - 参数：
+async def robot_get_pose(ip:str = Body("1")) -> ResponseReturn:
+    """## 获取机器人位置信息
+    - 参数：
+        - ip: str 机器人ip (可不填)
     - 返回：
         - {"pose":RobotPose 机器人位置信息}
     """
@@ -1347,14 +1434,17 @@ async def robot_get_pose(base: RobotBase = RobotBase()) -> ResponseReturn:
 
 
 @app.post("/user/robot/pose", summary="设置机器人位置信息", tags=["机器人管理"])
-async def robot_set_pose(pose: RobotPose,base: RobotBase = RobotBase()) -> ResponseReturn:
-    """# 设置机器人位置信息
+async def robot_set_pose(pose: RobotPose,ip:str = Body("1")) -> ResponseReturn:
+    """## 设置机器人位置信息
     - 参数：
         - pose: RobotPose 机器人位置信息（必须）
             - x: float 机器人x坐标
             - y: float 机器人y坐标
             - theta: float 机器人角度
+        - ip: str 机器人ip (可不填)
     - 示例：
+        - {"pose":RobotPose 机器人位置信息, "ip":str 机器人ip}
+    - 返回：
         - {"pose":RobotPose 机器人位置信息}
     """
     LastError = LastErrorBase()
@@ -1364,9 +1454,10 @@ async def robot_set_pose(pose: RobotPose,base: RobotBase = RobotBase()) -> Respo
 
 
 @app.get("/user/robot/task", summary="获取地图任务路径信息", tags=["机器人管理"])
-async def robot_get_task(base: RobotBase = RobotBase()) -> ResponseReturn:
-    """# 获取地图任务路径信息
+async def robot_get_task(ip:str = Body("1")) -> ResponseReturn:
+    """## 获取地图任务路径信息
     - 参数：
+        - ip: str 机器人ip (可不填)
     - 返回：
         - {"task":RobotTask 任务信息}
     """
@@ -1377,12 +1468,13 @@ async def robot_get_task(base: RobotBase = RobotBase()) -> ResponseReturn:
 
 
 @app.post("/user/robot/task", summary="设置地图任务路径信息", tags=["机器人管理"])
-async def robot_set_task(task: RobotTask,base: RobotBase = RobotBase()) -> ResponseReturn:
-    """# 设置地图任务路径信息
+async def robot_set_task(task: RobotTask,ip:str = Body("1")) -> ResponseReturn:
+    """## 设置地图任务路径信息
     - 参数：
         - RobotTask 任务信息模型
+        - ip: str 机器人ip (可不填)
     - 示例：        
-        - {"task":{GET方法返回的task的数据}}
+        - {"task":{GET方法返回的task的数据}, "ip":str 机器人ip}
     - 返回：
         - {"task":RobotTask 任务信息}
     """
@@ -1394,11 +1486,12 @@ async def robot_set_task(task: RobotTask,base: RobotBase = RobotBase()) -> Respo
 
 
 @app.get("/user/robot/tasks", summary="获取所有机器人任务信息", tags=["机器人管理"])
-async def robot_get_tasks(base: RobotBase = RobotBase()) -> ResponseReturn:
-    """# 获取所有机器人任务路径信息
+async def robot_get_tasks(ip:str = Body("1")) -> ResponseReturn:
+    """## 获取所有机器人任务路径信息
     - 参数：
+        - ip: str 机器人ip (可不填)
     - 返回：
-        - {"tasks":Dict[str, RobotTask]}
+        - {"tasks":Dict[str, RobotTask], "ip":str 机器人ip}
     """
     LastError = LastErrorBase()
     if GRobotManage.get_tasks():
@@ -1407,13 +1500,13 @@ async def robot_get_tasks(base: RobotBase = RobotBase()) -> ResponseReturn:
 
 
 @app.post("/user/robot/tasks", summary="设置机器人所有任务信息", tags=["机器人管理"])
-async def robot_set_tasks(tasks: Dict[str, RobotTask],base: RobotBase = RobotBase()) -> ResponseReturn:
-    """# 设置所有机器人实时任务信息
+async def robot_set_tasks(tasks: Dict[str, RobotTask],ip:str = Body("1")) -> ResponseReturn:
+    """## 设置所有机器人实时任务信息
     - 参数：
         - tasks:Dict[str,RobotTask] 任务信息字典
-
-        - 示例：
-            {"tasks":Dict[str, RobotTask]}
+        - ip: str 机器人ip (可不填)
+    - 示例：
+        - {"tasks":Dict[str, RobotTask], "ip":str 机器人ip}
     - 返回：
         - {"tasks":Dict[str, RobotTask]}
     """
@@ -1424,12 +1517,13 @@ async def robot_set_tasks(tasks: Dict[str, RobotTask],base: RobotBase = RobotBas
 
 
 @app.post("/user/robot/tasks/update", summary="更新机器人任务信息", tags=["机器人管理"])
-async def robot_update_tasks(tasks: Dict[str, RobotTask],base: RobotBase = RobotBase()) -> ResponseReturn:
-    """# 更新所有机器人实时任务信息
+async def robot_update_tasks(tasks: Dict[str, RobotTask],ip:str = Body("1")) -> ResponseReturn:
+    """## 更新所有机器人实时任务信息
     - 参数：
         - tasks:Dict[str,RobotTask] 任务信息字典
-        - 示例：        
-            - {"tasks":Dict[str, RobotTask]}
+        - ip: str 机器人ip (可不填)
+    - 示例：        
+        - {"tasks":Dict[str, RobotTask], "ip":str 机器人ip}
     - 返回：
         - {"tasks":Dict[str, RobotTask]}
     """
@@ -1440,13 +1534,14 @@ async def robot_update_tasks(tasks: Dict[str, RobotTask],base: RobotBase = Robot
 
 
 @app.post("/user/robot/tasks/add", summary="添加机器人的一个任务信息", tags=["机器人管理"])
-async def robot_add_tasks(task: RobotTask = RobotTask(),base: RobotBase = RobotBase()) -> ResponseReturn:
-    """# 添加机器人的一个任务信息
+async def robot_add_tasks(task: RobotTask = RobotTask(),ip:str = Body("1")) -> ResponseReturn:
+    """## 添加机器人的一个任务信息
     - 参数：
         - RobotTask 任务信息字典
             - taskName: str 任务名称(必须) 
-        - 示例：        
-            - {"task": RobotTask }
+        - ip: str 机器人ip (可不填)
+    - 示例：        
+        - {"task": RobotTask , "ip":str 机器人ip}
     - 返回：
         - {"tasks":Dict[str, RobotTask]}
     """
@@ -1457,13 +1552,15 @@ async def robot_add_tasks(task: RobotTask = RobotTask(),base: RobotBase = RobotB
 
 
 @app.post("/user/robot/tasks/delete", summary="删除机器人的一个任务信息", tags=["机器人管理"])
-async def robot_delete_tasks(task: RobotTask,base: RobotBase = RobotBase()) -> ResponseReturn:
+async def robot_delete_tasks(task: RobotTask,ip:str = Body("1")) -> ResponseReturn:
     """# 删除机器人的一个任务信息
     - 参数：
         - RobotTask 任务信息字典
             - taskName: str 任务名称(必须) 
-        - 示例：        
-            - {"task": RobotTask} 
+        - ip: str 机器人ip (可不填)
+
+    - 示例：        
+        - {"task": RobotTask, "ip":str 机器人ip} 
     - 返回：
         - {"tasks":Dict[str, RobotTask]}
     """
@@ -1492,7 +1589,7 @@ class SensorBase(BaseModel):
     name: str = "传感器"
     description: str = ""
 
-class SensorData(SensorBase):
+class SensorRobotData(SensorBase):
     """# 该项目消防机器人传感器数据
     两个氢气，一个烟雾传感器
     - 参数：
@@ -1507,19 +1604,22 @@ class SensorData(SensorBase):
     smoke: float = 0.0
     fire: int = 0
 
-    
+GSensorRobotData = SensorRobotData().dict()    
 class SensorManage:
     # 传感器信息管理类
-    def __init__(self, sensor:SensorData = SensorData()):
-        self.sensor = sensor
+    def __init__(self):
+        self.sensor:dict = SensorRobotData(**GSensorRobotData).dict()
     def get_data(self) -> bool:
         # 获取传感器数据
+        self.sensor:dict = SensorRobotData(**GSensorRobotData).dict()
         return True
 
-    def set_sensor(self, sensor:SensorData) -> bool:
+    def set_sensor(self, sensor:dict) -> bool:
         # 设置传感器数据
-        self.sensor = sensor
-        return True
+        GSensorRobotData.update(sensor)
+        if self.get_data():
+            return True
+        return False
     def set_fire(self, fire:int) -> bool:
         # 设置消防机器人灭火开关
         self.sensor.fire = fire
@@ -1534,17 +1634,17 @@ GSensorManage = SensorManage()
 """
 
 @app.get("/user/sensor/data", summary="获取传感器数据", tags=["传感器管理"])
-async def sensor_get_data(sensor:SensorData = SensorData()) -> ResponseReturn:
-    """# 获取传感器数据
+async def sensor_get_data(sensor:dict = Body(None,embed=True)) -> ResponseReturn:
+    """## 获取传感器数据
     - 参数：
-        - SensorData 传感器数据
+        - dict 传感器数据(目前可不用填写)
             - ip: str 传感器 监听ip地址(必须)
-            - port: int 传感器 监听端口(必须)
+            - port: int 传感器 监听端口
             - 其他参数可选
         - 示例：
-            - {"sensor":{"ip":"192.168.1.10","port":41024}}
+            - {"sensor":{"ip":"192.168.1.10","port":31024}}
     - 返回：
-        - {"sensor":SensorData}
+        - {"sensor":SensorRobotData}
     """
     LastError = LastErrorBase()
     if GSensorManage.get_data():
@@ -1552,39 +1652,42 @@ async def sensor_get_data(sensor:SensorData = SensorData()) -> ResponseReturn:
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 @app.post("/user/sensor/data", summary="设置传感器数据", tags=["传感器管理"])
-async def sensor_set_data(sensor:SensorData = SensorData()) -> ResponseReturn:
-    """# 设置传感器数据
+async def sensor_set_data(sensor:dict = Body(SensorBase(),embed=True)) -> ResponseReturn:
+    """## 设置传感器数据
     - 参数：
-        - SensorData 传感器数据
+        - SensorBase 传感器数据（可设置默认值，非必填，不填写则设置为默认值）
             - ip: str 传感器 监听ip地址
             - port: int 传感器 监听端口
             - name: str 传感器名称
             - description: str 传感器描述
-            - hydrogen1: float 氢气传感器1
-            - hydrogen2: float 氢气传感器2
-            - smoke: float 烟雾传感器
-            - fire: int 是否灭火开关 0:关 1:开（询问时更新）
         - 示例：
-            - {"sensor":SensorData}
+            - {"sensor":{"ip":"192.168.1.10","port":31024,"name":"传感器","description":"传感器描述"}}
     - 返回：
-        - {"sensor":SensorData}
+        - {"sensor":SensorRobotData}
     """
     LastError = LastErrorBase()
-    if GSensorManage.set_sensor(sensor):
+    if GSensorManage.set_sensor(SensorBase(**sensor).dict()):
         return ResponseReturn(status=True, code=0, message="Set sensor data success.", data={"sensor": GSensorManage.sensor})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 @app.post("/user/sensor/fire", summary="设置消防机器人灭火开关", tags=["传感器管理"])
-async def sensor_set_fire(sensor:SensorData = SensorBase()) -> ResponseReturn:
-    """# 设置消防机器人灭火开关
+async def sensor_set_fire(sensor:SensorRobotData = Body(SensorRobotData(),embed=True)) -> ResponseReturn:
+    """## 设置消防机器人灭火开关
     - 参数：
-        - SensorData 传感器数据
-            - fire: int 是否灭火开关 0:关 1:开（询问时更新）
-            - 其他参数无效
+        - SensorRobotData 传感器数据
+            - ip: str 传感器 监听ip地址（可不填）
+            - port: int 传感器 监听端口（可不填）
+            - name: str 传感器名称（不填）
+            - description: str 传感器描述（不填）
+            - hydrogen1: float 氢气传感器1（不填）
+            - hydrogen2: float 氢气传感器2（不填）
+            - smoke: float 烟雾传感器（不填）
+            - fire: int 是否灭火开关 0:关 1:开（询问时更新，必须-**其他参数无效**）
         - 示例：
-            - {"sensor":{"fire":0}}
+            - {"sensor":{"ip":"192.168.1.10","port"=31024,"fire":0}}
+            - {"sensor":{"fire":1}}
     - 返回：
-        - {"sensor":SensorData}
+        - {"sensor":SensorRobotData}
     """
     LastError = LastErrorBase()
     if GSensorManage.set_fire(sensor.fire):
@@ -1632,14 +1735,18 @@ class EventsManage:
         self.events[event.ID] = event
         return True
 
-    def del_event(self, event: EventBase) -> bool:
+    def del_event(self, ID:str) -> bool:
         # 删除一个事件信息
-        self.events.pop(event.ID)
-        return True
+        if ID in self.events.keys():
+            self.events.pop(ID)
+            return True
+        return False
 
-    def get_event(self, event: EventBase) -> EventBase:
+    def get_event(self, ID:str) -> bool:
         # 获取一个事件信息
-        return self.events[event.ID]
+        if ID in self.events.keys():
+            return True
+        return None
 
 
 GEventsManage = EventsManage()
@@ -1654,21 +1761,35 @@ GEventsManage = EventsManage()
 
 @app.get("/user/events", summary="获取所有事件信息", tags=["事件信息管理"])
 async def events_get_events() -> ResponseReturn:
-    """# 获取所有事件信息
+    """## 获取所有事件信息
     - 参数：
         - 无
     - 返回：
-        - {"events":Dict[str, EventBase]}
+        - {"events":Dict[ID:str, EventBase]}
     """
     LastError = LastErrorBase()
     if GEventsManage.get_events():
         return ResponseReturn(status=True, code=0, message="Get events list success.", data={"events": GEventsManage.events})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
+@app.get("/user/events/{ID}", summary="获取一个事件信息", tags=["事件信息管理"])
+async def events_get_event(ID:str) -> ResponseReturn:
+    """## 获取一个事件信息
+    - 参数：
+        - ID:str 事件ID，请求地址中获取，请求时填写
+        - 示例：
+            请求地址：/user/events/ID
+    - 返回：
+        - {"event":EventBase}
+    """
+    LastError = LastErrorBase()
+    if GEventsManage.get_event(ID):
+        return ResponseReturn(status=True, code=0, message="Get event success.", data={"event": GEventsManage.events(ID)})
+    return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 @app.post("/user/events", summary="设置所有事件信息", tags=["事件信息管理"])
-async def events_set_events(events: Dict[str, EventBase]) -> ResponseReturn:
-    """# 设置所有事件信息
+async def events_set_events(events: Dict[str, EventBase]=Body(embed=True)) -> ResponseReturn:
+    """## 设置所有事件信息
     - 参数：
         - events:Dict[str,EventBase] 事件信息字典
         - 示例：        
@@ -1683,7 +1804,7 @@ async def events_set_events(events: Dict[str, EventBase]) -> ResponseReturn:
 
 
 @app.post("/user/events/update", summary="更新事件信息", tags=["事件信息管理"])
-async def events_update_events(events: Dict[str, EventBase]) -> ResponseReturn:
+async def events_update_events(events: Dict[str, EventBase]=Body(embed=True)) -> ResponseReturn:
     """# 更新所有事件信息
     - 参数：
         - events:Dict[str,EventBase] 事件信息字典
@@ -1699,11 +1820,11 @@ async def events_update_events(events: Dict[str, EventBase]) -> ResponseReturn:
 
 
 @app.post("/user/events/add", summary="添加一个事件信息", tags=["事件信息管理"])
-async def events_add_event(event: EventBase) -> ResponseReturn:
+async def events_add_event(event: EventBase=Body(EventBase(),embed=True)) -> ResponseReturn:
     """# 添加一个事件信息
     - 参数：
         - EventBase 事件信息字典
-            - ID: str 事件ID(唯一)(时间戳)(必须)
+            - ID: str 事件ID(唯一)(时间戳)
             - name: str 事件名称
             - code: int 事件代码 
             - description: str 事件描述 
@@ -1719,7 +1840,7 @@ async def events_add_event(event: EventBase) -> ResponseReturn:
 
 
 @app.post("/user/events/del", summary="删除一个事件信息", tags=["事件信息管理"])
-async def events_del_event(event: EventBase) -> ResponseReturn:
+async def events_del_event(event: EventBase=Body(EventBase(),embed=True)) -> ResponseReturn:
     """# 删除一个事件信息
     - 参数：
         - EventBase 事件信息字典
