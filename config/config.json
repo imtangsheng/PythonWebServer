@@ -1,0 +1,11 @@
+{
+    "db": {
+        "type": "json",
+        "path": "config/db.json"
+    },
+    "log": {
+        "level": "info",
+        "path": "test.txt",
+        "name": "test1"
+    }
+}

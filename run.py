@@ -23,9 +23,13 @@ app_decription = """
 
 目前支持HTTP协议，WS 接口未开发。
 
-注：GET方法返回的数据即使POST修改提交的数据格式也是一样的。
+注:无说明，则GET方法返回的数据即是POST修改提交的数据格式也是一样的。
 
-## 2023-07-11 更新说明
+## 2023-07-15 更新说明
+    1.配置文件格式修改，增加了一个配置文件，config/config.json
+    2.支持保存修改的配置：用户模块，视觉模块，机器人模块，日志配置的配置更新
+
+## 2023-07-12 更新说明
     1.请求接口数据统一格式，{方法：数据}，参考示例
     2.所有模块的配置方法，增加删除更新的方法
     
@@ -70,7 +74,42 @@ app.version = "0.2"
 # app.openapi_tags = []
 # from fastapi.openapi.utils import get_openapi
 
+"""## 数据库使用说明
+- 数据库使用json文件，格式如下：
+    config = {"db":{"type":"json","path":"config/config.json"},"log":{"level":"info","path":"./test.log"}}
+- 数据库文件路径：config/config.json
+- 数据库文件格式：json
+- 数据库文件内容说明：
+    - UserDB: 用户数据库
+        - 用户配置信息: 用户名，密码，用户组，是否禁用，权限列表
+- 数据库文件内容示例：
+"""
+class JsonDB:
+    def __init__(self,db_path:str = "config/db.json"):
+        self.db_path = db_path
+    def load(self,file_path:str = None):
+        if file_path is not None:
+            self.db_path = file_path
+        with open(self.db_path,encoding='utf-8',mode='r') as f:
+            data = json.load(f,encoding="utf-8")
+        return data
+    def save(self,data:dict,file_path:str = None):
+        if file_path is None:
+            file_path = self.db_path
+        with open(file_path,mode='w',encoding = 'utf-8') as f:
+            json.dump(data,f,ensure_ascii=False,indent=4)
 
+ConfigAPP_path = "config/config.json"
+ConfigAPP = json.load(open(ConfigAPP_path,encoding='utf-8',mode='r'))
+if ConfigAPP["db"]["type"] == "json":
+    APP_JsonDB = JsonDB(ConfigAPP["db"]["path"])
+    APP_DB = APP_JsonDB.load()
+
+elif ConfigAPP["db"]["type"] == "sqlite":
+    import sqlite3
+    # APP_DB = sqlite3.connect(ConfigAPP["db"]["path"])
+else:
+    raise ValueError("db type error")
 
 """# 通用响应模型返回的数据格式
 """
@@ -124,31 +163,6 @@ class CommandBase(BaseModel):
 
 """# UserManage 用户管理模块
 """
-# 用户数据库
-UsersDB = {
-    "test": {
-        "name": "test",
-        "group": "guest",
-        "hashed_password": "$2b$12$O5g5t0DKQkAZy6vt7JB6deH6NMS9cUNyFtZeeNsPtk83KPVjs5e92",
-        "disabled": False,
-        "permissions": ["guest", "post:read"]
-    },
-    "dc": {
-        "name": "dc",
-        "group": "stander user",
-        "hashed_password": "$2b$12$O5g5t0DKQkAZy6vt7JB6deH6NMS9cUNyFtZeeNsPtk83KPVjs5e92",
-        "disabled": False,
-        "permissions": ["guest", "post:read"]
-    },
-    "admin": {
-        "name": "admin",
-        "group": "administator",
-        "hashed_password": "$2b$12$cJn24OGIxnq1bbzwg1fc1OhlXpjYrvCnzQcU0ipCqTlDFdPET9xfa",
-        "disabled": False,
-        "permissions": ["administator", "post:wirtes"]
-    }
-}
-
 """# 用户管理模块，用户认证吗，权限管理
 """
 class UserInput(BaseModel):
@@ -190,7 +204,7 @@ class UserManage:
     # pwd_context.verify(password, hashed_password)):
     user_current_id = ""  # 当前用户ID
     user_token = ""  # 当前用户token
-    users_db = UsersDB  # 用户数据库
+    users_db = APP_DB["UsersDB"]  # 用户数据库
     user_setting = {}  # 用户配置
     for user in users_db:
         user_setting[user]=UserSetting(**users_db[user])
@@ -198,8 +212,8 @@ class UserManage:
     def get_user_setting(self) -> bool:
         # 获取用户配置
         self.user_setting = {}  # 用户配置
+        self.users_db = APP_DB["UsersDB"]
         for user in self.users_db:
-            print("设置用户配置")
             self.user_setting[user] = UserSetting(**self.users_db[user])
         return True
     def set_user_setting(self,setting:dict) -> bool:
@@ -207,17 +221,22 @@ class UserManage:
         self.user_setting = {}  # 用户配置
         for user in self.users_db:
             self.user_setting[user] = UserSetting(**self.users_db[user])
+        # 保存修改
+        APP_JsonDB.save(APP_DB)
         return True
     def update_user_setting(self,setting:dict) -> bool:
         # 更新用户配置
         username = setting['name']
         if username == "admin" or username not in self.users_db.keys():
             return False
+        print("group")
         for key in setting.keys():
             if key in self.users_db[username].keys():
                 self.users_db[username][key] = setting[key]
 
         if self.get_user_setting():
+            # 保存修改
+            APP_JsonDB.save(APP_DB)
             return True
         return False
     def add_user_setting(self,setting:dict) -> bool:
@@ -227,6 +246,8 @@ class UserManage:
             return False
         self.users_db[username] = setting
         if self.get_user_setting():
+            # 保存修改
+            APP_JsonDB.save(APP_DB)
             return True
         return False
     def del_user_setting(self,username:str) -> bool:
@@ -235,6 +256,8 @@ class UserManage:
             return False
         self.users_db.pop(username)
         if self.get_user_setting():
+            # 保存修改
+            APP_JsonDB.save(APP_DB)
             return True
         return False
 
@@ -349,8 +372,10 @@ async def user_login(user: UserInput=Body(embed=True)) -> ResponseReturn:
 
 @app.get("/login/me", summary="获取当前登录用户的信息", tags=["用户管理"])
 async def user_read_me(token:str= Header("token")) -> ResponseReturn:
-    """# 返回当前登录用户的信息
+    """## 返回当前登录用户的信息
     - Parameters:
+        - 无
+    ## 返回值:
     - response:
         - {"username":username}
     """
@@ -408,7 +433,9 @@ async def user_get_config(token:str= Header("token")) -> ResponseReturn:
     if username is None:
         return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
     if GUserManage.get_user_setting():
+        print(GUserManage.user_setting.keys())
         return ResponseReturn(status=True, code=0, message="获取当前登录用户的信息", data={"config": GUserManage.user_setting})
+    return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 @app.post("/user/config/update", summary="更新用户配置信息", tags=["用户管理"])
 async def user_update_config(config: Dict=Body(), token:str= Header("token")) -> ResponseReturn:
     """## 更新用户配置信息
@@ -421,15 +448,20 @@ async def user_update_config(config: Dict=Body(), token:str= Header("token")) ->
                 - **permissions**: list,权限列表
     - example:
         - {"name": "test", "password": "dc123456", "group": "admin", "disabled": False, "permissions": ["admin", "user"]}
+    ## 返回值:
     - response:
         - {"config":[UserSetting]}
     """
-    global LastError
     LastError = LastErrorBase()
-    if config is None or config['name'] == "admin":
+    if config is None:
         LastError.ERROR_TYPE = "USER_CONFIG_UPDATE_ERROR"
         LastError.code = 1
-        LastError.message = "用户配置更新失败"
+        LastError.message = "输入为空"
+        return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
+    if config['name'] == "admin":
+        LastError.ERROR_TYPE = "USER_CONFIG_UPDATE_ERROR"
+        LastError.code = 1
+        LastError.message = "输入的用户非法，不能修改"
         return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
     if GUserManage.update_user_setting(config):
         return ResponseReturn(status=True, code=0, message="用户配置更新成功", data={"config": GUserManage.user_setting[config['name']]})
@@ -447,6 +479,7 @@ async def user_add_config(config: Dict=Body(), token:str= Header("token")) -> Re
                 - **permissions**: list,权限列表
     - example:
         - {"name": "test", "password": "dc123456", "group": "admin", "disabled": False, "permissions": ["admin", "user"]}
+    ## 返回值:
     - response:
         - {"config":[UserSetting]}
     """
@@ -469,6 +502,7 @@ async def user_del_config(config: Dict=Body(), token:str= Header("token")) -> Re
                 - **name**: str,用户名
     - example:
         - {"name": "test"}
+    ## 返回值:
     - response:
         - {"config":{"usrname":[UserSetting]}
     """
@@ -490,7 +524,7 @@ async def user_del_config(config: Dict=Body(), token:str= Header("token")) -> Re
 """# 视觉管理模块
 """
 class VisionBase(BaseModel):
-    """# VisionBase模型表示视觉参数
+    """## VisionBase模型表示视觉参数
     - ip: string, IP地址
     - port: int, 端口号
     - username: string, 用户名
@@ -502,7 +536,7 @@ class VisionBase(BaseModel):
     password: str = "abcd1234"
 
 class VisionPose(BaseModel):
-    """# VisionPose模型表示p、t和z参数
+    """## VisionPose模型表示p、t和z参数
     - **lChannel**: int, 通道号，1-可见光，2-热成像
     - **wAction**: int, 1-定位PTZ参数，2-定位P参数，3-定位T参数，4-定位Z参数，5-定位PT参数
     - **wPanPos**: int, 云台水平方向控制，范围0-3600
@@ -548,66 +582,8 @@ class VisionSetting(BaseModel):
     """
     command: List[CommandBase] = []
     file_path: Dict = {}
-
-GVisionSetting = { # 视觉模块1号
-            "command": [ # 指令
-                {
-                    "name": "可见光拍照",
-                    "description": "可见光拍照",
-                    "code": "capture",
-                    "data": {
-                        "lChannel": 1,
-                        "sPicFileName": "%日期+可见光拍照.jpg"
-                    }
-                },
-                {
-                    "name": "热成像拍照",
-                    "description": "热成像拍照",
-                    "code": "capture",
-                    "data": {
-                        "lChannel": 2,
-                        "sPicFileName": "%日期+热成像拍照.jpg"
-                    }
-                },
-                {
-                    "name": "PTZ控制",
-                    "description": "PTZ控制移动",
-                    "code": "PTZControl",
-                    "data": {
-                        "lChannel": 1,
-                        "dwPTZCommand": 1,
-                        "dwStop": 0
-                    }
-                },
-                {
-                    "name": "PTZ预置点移动",
-                    "description": "PTZ预置点移动",
-                    "code": "PTZPreset",
-                    "data": {
-                        "lChannel": 1,
-                        "dwPTZCommand": 39,
-                        "dwPresetIndex": 1
-                    }
-                },
-                {
-                    "name":"PTZ指定点移动",
-                    "description":"PTZ指定点移动",
-                    "code":"SetPTZPOS",
-                    "data":{
-                        "lChannel":1,
-                        "wAction":1,
-                        "dwPanPos":0,
-                        "dwTiltPos":0,
-                        "dwZoomPos":0
-                    }
-                }
-                
-            ],
-            "file_path": {
-                "video": "D:\\DCRobot\\video",
-                "image": "D:\\DCRobot\\image"
-            }
-}
+   
+GVisionSetting = APP_DB["VisionSetting"]
 class VisionManage:
     """# 海康威视，微影摄像头服务模块
     """
@@ -647,6 +623,8 @@ class VisionManage:
         # 设置配置信息
         GVisionSetting = setting
         if self.get_config():
+            # 保存修改
+            APP_JsonDB.save(APP_DB)
             return True
         return False
     def update_config(self,setting:dict) -> bool:
@@ -655,6 +633,8 @@ class VisionManage:
             if key in GVisionSetting.keys():
                 GVisionSetting[key] = setting[key]
         if self.get_config():
+            # 保存修改
+            APP_JsonDB.save(APP_DB)
             return True
         return False
     def get_pose(self,lChannel: int = 1) -> bool:
@@ -1001,12 +981,6 @@ class RobotStatus(BaseModel):
     sensor: Dict[str, str] = {"imu_status": "ON", "lidar_status": "ON",
                               "RTK_status": "OFF", "camera_status": "OFF"}  # 机器人传感器状态
 
-    class Config:
-        """## 定义RobotStatus模型配置
-        """
-        schema_extra = {
-            "exclude":False
-        }
 """# 机器人上报的日志相关模块
 """
 
@@ -1079,130 +1053,7 @@ class RobotSetting(BaseModel):
 
 
 
-GRobotSetting  = {
-            "command": [ 
-                {
-                    "name":"机器人指定点移动",
-                    "description":"机器人指定点移动",
-                    "code":"realtime_task",
-                    "data":{
-                        "loopTime":1,
-                        "points":[{
-                            "position":{
-                                "x":0,
-                                "y":0,
-                                "theta":0
-                            },
-                            "isNew":False,
-                            "cpx":0,
-                            "cpy":0
-                        }],
-                        "mode":""
-                    }
-                }
-            ],
-            "mapLimit": [ 
-                {
-                    "min":{
-                        "minX": 0,
-                        "minY": 0,
-                        "minTheta": 0
-                    },
-                    "max":{
-                        "maxX": 100,
-                        "maxY": 100,
-                        "maxTheta": 0
-                    }
-                }
-            ],
-            "sensorLimit":[
-                {
-                    "name":"氢气传感器1",
-                    "code":"sensor1",
-                    "min":0,
-                    "max":100
-                },
-                {
-                    "name":"氢气传感器2",
-                    "code":"sensor2",
-                    "min":0,
-                    "max":100
-                },
-                {
-                    "name" : "烟雾传感器",
-                    "code" : "sensor3",
-                    "min" : 0,
-                    "max" : 100
-                }
-            ],
-            "taskTime":[ 
-                {
-                    "name":"时间设置段1",
-                    "taskTime": [{"start":"00:00:00","end":"01:59:59"},{"start":"02:00:00","end":"03:59:59"},{"start":"04:00:00","end":"05:59:59"},{"start":"06:00:00","end":"07:59:59"},{"start":"08:00:00","end":"09:59:59"},{"start":"10:00:00","end":"11:59:59"},{"start":"12:00:00","end":"13:59:59"},{"start":"14:00:00","end":"15:59:59"},{"start":"16:00:00","end":"17:59:59"},{"start":"18:00:00","end":"19:59:59"},{"start":"20:00:00","end":"21:59:59"},{"start":"22:00:00","end":"23:59:59"}],
-                    "remark":"时间段备注1"
-                },
-                {
-                    "name":"时间设置段1",
-                    "taskTime": [{"start":"00:00:00","end":"01:59:59"},{"start":"02:00:00","end":"03:59:59"},{"start":"04:00:00","end":"05:59:59"},{"start":"06:00:00","end":"07:59:59"},{"start":"08:00:00","end":"09:59:59"},{"start":"10:00:00","end":"11:59:59"},{"start":"12:00:00","end":"13:59:59"},{"start":"14:00:00","end":"15:59:59"},{"start":"16:00:00","end":"17:59:59"},{"start":"18:00:00","end":"19:59:59"},{"start":"20:00:00","end":"21:59:59"},{"start":"22:00:00","end":"23:59:59"}],
-                    "remark":"时间段备注1"   
-                }
-            ],
-            "curisePoints":[
-                {
-                    "name":"巡航点设置1",
-                    "position":{
-                        "x":0,
-                        "y":0,
-                        "theta":0
-                    },
-                    "vision":[
-                        {
-                            "name":"云台指令1",
-                            "commad":"指令1",
-                            "time":10#等待时间间隔
-                        },
-                        {
-                            "name":"云台指令2",
-                            "commad":"指令2",
-                            "time":10#等待时间间隔
-                        }
-                    ],
-                    "curiseFlag":True,#巡航开关
-                    "LightFlag":True,#灯光开关
-                    "remark":"巡航设置备注1"
-
-                    
-                },
-                {
-                    "name":"巡航点设置2",
-                    "position":{
-                        "x":0,
-                        "y":0,
-                        "theta":0
-                    },
-                    "vision":[
-                        {
-                            "name":"云台指令1",
-                            "commad":"指令1",
-                            "time":10#等待时间间隔
-                        },
-                        {
-                            "name":"云台指令2",
-                            "commad":"指令2",
-                            "time":10#等待时间间隔
-                        }
-                    ],
-                    "curiseFlag":True,#巡航开关
-                    "LightFlag":True,#灯光开关
-                    "remark":"巡航设置备注1"
-
-                    
-                }
-            ]
-
-    
-}
-
+GRobotSetting  = APP_DB["RobotSetting"]
 class RobotManage:
     """# 机器人管理类
     """
@@ -1252,6 +1103,8 @@ class RobotManage:
             if key in GRobotSetting.keys():
                 GRobotSetting[key] = setting[key]
         if self.get_config():
+            # 保存修改
+            APP_JsonDB.save(APP_DB)
             return True
         return False
     def get_status(self) -> bool:
@@ -1874,15 +1727,68 @@ async def root():
     with open("api.html", encoding='utf-8') as f:
         return HTMLResponse(content=f.read(), status_code=200)
 
+class LogSettingBase(BaseModel):
+    """## 日志设置信息
+    - 参数：
+        - level: str 日志级别
+            - DEBUG
+            - INFO
+            - WARNING
+            - ERROR
+            - CRITICAL
+        - logpath: str 日志路径
+        - logname: str 日志名称
+        - logmaxsize: int 日志最大大小
+        - logmaxcount: int 日志最大数量
+        - logmaxtime: int 日志最大时间
+        - remark: str 备注
+    """
+    level: str = "DEBUG"
+    path: str = "./log"
+    name: str = "log"
+    maxsize: int = 1024 * 1024 * 10
+    maxcount: int = 10
+    maxtime: int = 24 * 60 * 60 * 7
+    remark: str = ""
 
+GLogSetting = ConfigAPP["log"]
+@app.get("/other/log/config", summary="获取日志设置信息", tags=["其他"])
+async def other_log_config() -> ResponseReturn:
+    """# 获取日志设置信息
+    - 参数：
+        - 无参数
+    - 返回：    
+        - {"config":LogSettingBase}
+    """
+    return ResponseReturn(status=True, code=0, message="Success", data={"config": GLogSetting})
 
-
+@app.post("/other/log/config/update", summary="更新日志设置信息", tags=["其他"])
+async def other_log_update_config(config = Body(embed=True)) -> ResponseReturn:
+    """## 更新日志设置信息
+    - 参数：
+        - config:LogSettingBase 日志设置信息
+        - 示例：
+            - {"config":{"level":"DEBUG","path":"./log","name":"log","maxsize":1024*1024*10,"maxcount":10,"maxtime":24*60*60*7,"remark":""}}
+    - 返回：
+        - {"config":LogSettingBase}
+    """
+    LastError = LastErrorBase()
+    if config:
+        GLogSetting.update(config)
+        # ConfigAPP["log"] = GLogSetting
+        with open(ConfigAPP_path,mode='w',encoding = 'utf-8') as f:
+            json.dump(ConfigAPP,f,ensure_ascii=False,indent=4)
+        return ResponseReturn(status=True, code=0, message="Update log config success.", data={"config": GLogSetting})
+    LastError.ERROR_TYPE = "LOG_CONFIG_ERROR"
+    LastError.code = 400
+    LastError.message = "Log config error."
+    return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 @app.post("other/command", summary="执行用户命令", tags=["其他"])
 async def other_command(command: CommandBase) -> ResponseReturn:
-    """# **执行用户命令,返回执行结果 DEBUG 的测试模式，仅限测试使用**
+    """## **执行用户命令,返回执行结果 DEBUG 的测试模式，仅限测试使用**
     - 参数：
-        - command:CommandBase
+        - command:CommandBase - 暂时没有命令
             - command: str 命令名称(必须)
                 - start: 开始
                 - stop: 停止
@@ -1919,45 +1825,7 @@ async def other_error() -> ResponseReturn:
     return ResponseReturn(status=True, code=0, message="Success", data={"lasterror": GLastError})
 
 
-class LogSettingBase(BaseModel):
-    """## 日志设置信息
-    - 参数：
-        - loglevel: str 日志级别
-            - DEBUG
-            - INFO
-            - WARNING
-            - ERROR
-            - CRITICAL
-        - logpath: str 日志路径
-        - logname: str 日志名称
-        - logmaxsize: int 日志最大大小
-        - logmaxcount: int 日志最大数量
-        - logmaxtime: int 日志最大时间
-        - remark: str 备注
-    """
-    loglevel: str = "DEBUG"
-    logpath: str = "./log"
-    logname: str = "log"
-    logmaxsize: int = 1024 * 1024 * 10
-    logmaxcount: int = 10
-    logmaxtime: int = 24 * 60 * 60 * 7
-    remark: str = ""
 
-GLogSetting = {
-        "logpath":"D:\\DCRobot\\log\\",
-        "logmaxtime": 24 * 60 * 60,
-        "remark":"日志分为系统日志、操作日志和事件日志三大类，设置格式：时间，用户，类别，描述信息，设备名称，详细信息，操作结果，备注信息"
-    }
-
-@app.get("/other/log/config", summary="获取日志设置信息", tags=["其他"])
-async def other_log_config() -> ResponseReturn:
-    """# 获取日志设置信息
-    - 参数：
-        - 无参数
-    - 返回：    
-        - {"config":LogSettingBase}
-    """
-    return ResponseReturn(status=True, code=0, message="Success", data={"config": GLogSetting})
 
 """END
 # 其他 请求路径与方法
@@ -1967,7 +1835,7 @@ async def other_log_config() -> ResponseReturn:
 """
 # 以下为权限验证开关
 FlagCheckPermission = False
-@app.middleware("http")
+# @app.middleware("http")
 async def check_authentication(request: Request, call_next):
     def check_permission(method, api, auth):
         # The following paths are always allowed:
@@ -2014,9 +1882,8 @@ app.add_middleware(
 # app.openapi_tags = []
 # app.models_to_show = [LastErrorBase,ResponseReturn,RobotStatus,VisionConfig,EventBase,RobotTask]
 # app.openapi_schema= {}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("run:app", reload=True, port=8000, host="0.0.0.0")
-    # uvicorn.run("run:app", reload=True, port=8000, host="0.0.0.0",ssl_keyfile="key.pem", ssl_certfile="cert.pem")
+# if __name__ == "__main__":
+#     import uvicorn
+#     # uvicorn 将重新加载您的代码，因为您是从代码内部调用的。也许解决方法是将 uvicorn 调用放在单独的文件中，或者正如我所说，只需使用命令行
+#     uvicorn.run("run:app", reload=True, port=8000, host="0.0.0.0",log_level="debug",limit_max_requests=100,limit_concurrency=100)
+#     # uvicorn.run("run:app", reload=True, port=8000, host="0.0.0.0")
