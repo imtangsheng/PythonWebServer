@@ -345,7 +345,7 @@ GUserManage = UserManage()
 
 
 @app.post("/login", summary="用户登录，返回token值", tags=["用户管理"],include_in_schema=False)
-async def user_login(user: UserInput=Body(embed=True)) -> ResponseReturn:
+async def user_login(user: UserInput) -> ResponseReturn:
     """## 用户登录，返回token值
     - Parameters:
         - **username**: string, 用户名

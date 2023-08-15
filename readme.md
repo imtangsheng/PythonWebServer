@@ -136,7 +136,7 @@ def get_by_id(self, id):
 ```
 
 
-# 安全第一步登录模块
+## 安全第一步登录模块
 
 ```
 pip install python-multipart
@@ -147,4 +147,26 @@ pip install passlib[bcrypt]
 # openssl rand -hex 32
 
 ```
+## API 的设计与实现
 
+## 脚本类
+
+
+/script/cv2capture.py
+
+依赖 按照opencv
+
+```
+# 安装 opencv-contrib-python
+# 使用国内源 -i https://mirrors.aliyun.com/pypi/simple/   
+pip install opencv-contrib-python -i https://mirrors.aliyun.com/pypi/simple/   
+
+```
+实现录像，
+
+
+##  部署到服务器，使用Git方法，共享文件夹
+忽略全部文件夹
+```
+git config --global --add safe.directory "*"
+```
