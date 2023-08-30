@@ -351,7 +351,7 @@ async def user_login(user: UserInput) -> ResponseReturn:
         - **username**: string, 用户名
         - **password**: string, 密码
     - example:
-        - {"user":{"username": "admin", "password": "dc123456"}}
+        - {"username": "admin", "password": "dc123456"}
     ## 返回值:
     - response:
         - {"token":string(token值)}
@@ -1825,7 +1825,29 @@ async def other_error() -> ResponseReturn:
     return ResponseReturn(status=True, code=0, message="Success", data={"lasterror": GLastError})
 
 
+class MeterBase(BaseModel):
+    code:int
+    point:str
+    url:str=""
+    data:Union[Dict,str] = ""
 
+@app.post("/other/meter", summary="获取表计识别算法的结果" , tags=["其他"])
+async def other_meter(meter:MeterBase) -> ResponseReturn:
+    """## 请求表计识别数据
+    - 参数:
+        - code: int 唯一标识，是表计的编码类别
+        - point:str = "1", 位置点参数，可选，唯一标识
+        - url?: str = "/image filename", 图片地址，可选
+        - data: 参数 params, 参数列表,为string类的字典数据类型,可选
+    - 示例
+        - 请求
+            - {"code":1,"point":"1","url":"D:/imgMeter/img.jpg","data":"{ \"id\":1}"}
+        - 返回
+            - {"status":False,"code":1,"message":"识别1成功",data:{"code":1,"point":"1","url":"D:/imgMeter/imgMeter.jpg","data":[1.2,3.4]}}
+    """
+    print(meter)
+    meter_return = {"status":False,"code":meter.code,"message":"识别"+meter.point+"成功","data":{"code":meter.code,"point":meter.point,"url":"D:/imgMeter/imgMeter.jpg","data":[1.2,3.4]}}
+    return ResponseReturn(status=True, code=meter_return['code'], message=meter_return["message"], data=meter_return["data"])
 
 """END
 # 其他 请求路径与方法
