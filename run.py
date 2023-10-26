@@ -9,21 +9,24 @@ Author: Tang
 from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import Union, Optional, List, Dict
 import json
-from pydantic import BaseModel,Field,confloat,validator
+from pydantic import BaseModel, Field, confloat, validator
 import os
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
-from fastapi import FastAPI, Depends, status, Request, Response, HTTPException, Header,Body
+from fastapi import FastAPI, Depends, status, Request, Response, HTTPException, Header, Body
 
-
-app_decription = """
+app_description = """
 # 机器人后端API说明
 
 目前支持HTTP协议，WS 接口未开发。
 
 注:无说明，则GET方法返回的数据即是POST修改提交的数据格式也是一样的。
+
+## 2023-10-19 更新说明
+    1.增加指针算法模块
+    2.更新云台设置ptz的pose接口参数
 
 ## 2023-07-15 更新说明
     1.配置文件格式修改，增加了一个配置文件，config/config.json
@@ -46,6 +49,7 @@ app_decription = """
  
 """
 
+
 class CustomFastAPI(FastAPI):
     def __init__(self, *args, **kwargs):
         self.models_to_show = kwargs.pop("models_to_show", [])
@@ -67,8 +71,8 @@ app = CustomFastAPI()
 
 # app = FastAPI()
 
-app.title='机器人后端API说明'
-app.description=app_decription
+app.title = '机器人后端API说明'
+app.description = app_description
 app.version = "0.2"
 # app.openapi(exclude_schemas=True)
 # app.openapi_tags = []
@@ -84,25 +88,31 @@ app.version = "0.2"
         - 用户配置信息: 用户名，密码，用户组，是否禁用，权限列表
 - 数据库文件内容示例：
 """
+
+
 class JsonDB:
-    def __init__(self,db_path:str = "config/db.json"):
+    def __init__(self, db_path: str = "config/db.json"):
         self.db_path = db_path
-    def load(self,file_path:str = None):
+
+    def load(self, file_path: str = None):
         if file_path is not None:
             self.db_path = file_path
-        with open(self.db_path,encoding='utf-8',mode='r') as f:
-            data = json.load(f,encoding="utf-8")
+        with open(self.db_path, encoding='utf-8', mode='r') as f:
+            data = json.load(f, encoding="utf-8")
         return data
-    def save(self,data:dict,file_path:str = None):
+
+    def save(self, data: dict, file_path: str = None):
         if file_path is None:
             file_path = self.db_path
-        with open(file_path,mode='w',encoding = 'utf-8') as f:
-            json.dump(data,f,ensure_ascii=False,indent=4)
+        with open(file_path, mode='w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+
 
 ConfigAPP_path = "config/config.json"
-ConfigAPP = json.load(open(ConfigAPP_path,encoding='utf-8',mode='r'))
+ConfigAPP = json.load(open(ConfigAPP_path, encoding='utf-8', mode='r'))
 if ConfigAPP["db"]["type"] == "json":
     APP_JsonDB = JsonDB(ConfigAPP["db"]["path"])
+    print(ConfigAPP["db"]["path"])
     APP_DB = APP_JsonDB.load()
 
 elif ConfigAPP["db"]["type"] == "sqlite":
@@ -113,6 +123,7 @@ else:
 
 """# 通用响应模型返回的数据格式
 """
+
 
 # @exclude
 class LastErrorBase(BaseModel):
@@ -125,6 +136,8 @@ class LastErrorBase(BaseModel):
     ERROR_TYPE: str = ""
     code: int = 0
     message: str = "没有错误"
+
+
 LastError = LastErrorBase()
 
 
@@ -137,7 +150,21 @@ class ResponseReturn(BaseModel):
         - **data**: [str,dict数据],返回的数据，也是对应POST的数据
     """
     status: bool = False
-    code: int = -1
+    code: Union[int, str] = -1
+    message: str = ""
+    data: Union[Dict, LastErrorBase] = LastErrorBase()
+
+
+class ResponseModel(BaseModel):
+    """## 通用响应模型返回的数据格式
+    - 参数
+        - **status**: bool,请求状态 True 成功  False 失败
+        - **code**: str,请求的类型代码，为对应的请求路由
+        - **message**: str,消息
+        - **data**: [str,dict数据],返回的数据，也是对应POST的数据
+    """
+    status: bool = False
+    code: str = ""
     message: str = ""
     data: Union[Dict, LastErrorBase] = LastErrorBase()
 
@@ -157,6 +184,7 @@ class CommandBase(BaseModel):
     code: str = "command code"
     data: dict = {}
 
+
 """END
 # 通用响应模型返回的数据格式
 """
@@ -165,6 +193,8 @@ class CommandBase(BaseModel):
 """
 """# 用户管理模块，用户认证吗，权限管理
 """
+
+
 class UserInput(BaseModel):
     """## 用户输入模型
         - **username**: str,用户名
@@ -172,6 +202,7 @@ class UserInput(BaseModel):
     """
     username: str = "admin"  # 用户名
     password: str = "abcd1234"  # 密码
+
 
 # to get a string like this run in git bash:
 # openssl rand -hex 32
@@ -195,6 +226,7 @@ class UserSetting(BaseModel):
     disabled: bool = False
     permissions: List[str] = ["administator"]
 
+
 class UserManage:
     """#  用户管理模块，用户认证吗，权限管理
     """
@@ -207,7 +239,7 @@ class UserManage:
     users_db = APP_DB["UsersDB"]  # 用户数据库
     user_setting = {}  # 用户配置
     for user in users_db:
-        user_setting[user]=UserSetting(**users_db[user])
+        user_setting[user] = UserSetting(**users_db[user])
 
     def get_user_setting(self) -> bool:
         # 获取用户配置
@@ -216,7 +248,8 @@ class UserManage:
         for user in self.users_db:
             self.user_setting[user] = UserSetting(**self.users_db[user])
         return True
-    def set_user_setting(self,setting:dict) -> bool:
+
+    def set_user_setting(self, setting: dict) -> bool:
         # 设置用户配置
         self.user_setting = {}  # 用户配置
         for user in self.users_db:
@@ -224,7 +257,8 @@ class UserManage:
         # 保存修改
         APP_JsonDB.save(APP_DB)
         return True
-    def update_user_setting(self,setting:dict) -> bool:
+
+    def update_user_setting(self, setting: dict) -> bool:
         # 更新用户配置
         username = setting['name']
         if username == "admin" or username not in self.users_db.keys():
@@ -239,7 +273,8 @@ class UserManage:
             APP_JsonDB.save(APP_DB)
             return True
         return False
-    def add_user_setting(self,setting:dict) -> bool:
+
+    def add_user_setting(self, setting: dict) -> bool:
         # 添加用户配置
         username = setting['name']
         if username == "admin" or username in self.users_db.keys():
@@ -250,7 +285,8 @@ class UserManage:
             APP_JsonDB.save(APP_DB)
             return True
         return False
-    def del_user_setting(self,username:str) -> bool:
+
+    def del_user_setting(self, username: str) -> bool:
         # 删除用户配置
         if username == "admin" or username not in self.users_db.keys():
             return False
@@ -285,13 +321,16 @@ class UserManage:
         - **permissions**: str,权限
         # 返回值:权限正确返回True,否则返回False
         """
+
         def check_authorization(func):
             def wrapper(*args, **kwargs):
                 return func(*args, **kwargs)
                 if permissions in self.users_db[self.user_current_id].get("permissions"):
                     return func(*args, **kwargs)
                 return False
+
             return wrapper
+
         return check_authorization
 
     def password_hash(self, password: str) -> str:
@@ -338,13 +377,12 @@ GUserManage = UserManage()
 用户管理模块UserManage
 """
 
-
 """
 用户管理模块 请求路径与方法
 """
 
 
-@app.post("/login", summary="用户登录，返回token值", tags=["用户管理"],include_in_schema=False)
+@app.post("/login", summary="用户登录，返回token值", tags=["用户管理"], include_in_schema=False)
 async def user_login(user: UserInput) -> ResponseReturn:
     """## 用户登录，返回token值
     - Parameters:
@@ -367,11 +405,12 @@ async def user_login(user: UserInput) -> ResponseReturn:
         LastError.code = 1
         LastError.message = "用户密码错误"
         return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
-    return ResponseReturn(status=True, code=0, message="用户登录:"+user.username, data={"token": GUserManage.token_get(user.username)})
+    return ResponseReturn(status=True, code=0, message="用户登录:" + user.username,
+                          data={"token": GUserManage.token_get(user.username)})
 
 
 @app.get("/login/me", summary="获取当前登录用户的信息", tags=["用户管理"])
-async def user_read_me(token:str= Header("token")) -> ResponseReturn:
+async def user_read_me(token: str = Header("token")) -> ResponseReturn:
     """## 返回当前登录用户的信息
     - Parameters:
         - 无
@@ -392,7 +431,7 @@ async def user_read_me(token:str= Header("token")) -> ResponseReturn:
     return ResponseReturn(status=True, code=0, message="获取当前登录用户的信息", data={"username": username})
 
 
-@app.post("/user/login", summary="用户登录，返回token值", tags=["用户管理"],response_model_exclude={BaseModel})
+@app.post("/user/login", summary="用户登录，返回token值", tags=["用户管理"], response_model_exclude={BaseModel})
 async def user_login_2(user: UserInput) -> ResponseReturn:
     """## 用户登录，返回token值
     - Parameters:
@@ -415,10 +454,12 @@ async def user_login_2(user: UserInput) -> ResponseReturn:
         LastError.code = 1
         LastError.message = "用户密码错误"
         return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
-    return ResponseReturn(status=True, code=0, message="用户登录:"+user.username, data={"token": GUserManage.token_get(user.username)})
+    return ResponseReturn(status=True, code=0, message="用户登录:" + user.username,
+                          data={"token": GUserManage.token_get(user.username)})
+
 
 @app.get("/user/config", summary="获取用户配置信息", tags=["用户管理"])
-async def user_get_config(token:str= Header("token")) -> ResponseReturn:
+async def user_get_config(token: str = Header("token")) -> ResponseReturn:
     """## 获取用户配置信息
     - Parameters:
         - 需要先验证登录（暂时不用验证）
@@ -434,10 +475,13 @@ async def user_get_config(token:str= Header("token")) -> ResponseReturn:
         return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
     if GUserManage.get_user_setting():
         print(GUserManage.user_setting.keys())
-        return ResponseReturn(status=True, code=0, message="获取当前登录用户的信息", data={"config": GUserManage.user_setting})
+        return ResponseReturn(status=True, code=0, message="获取当前登录用户的信息",
+                              data={"config": GUserManage.user_setting})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
+
+
 @app.post("/user/config/update", summary="更新用户配置信息", tags=["用户管理"])
-async def user_update_config(config: Dict=Body(), token:str= Header("token")) -> ResponseReturn:
+async def user_update_config(config: Dict = Body(), token: str = Header("token")) -> ResponseReturn:
     """## 更新用户配置信息
     - Parameters:
         - userSetting: Dict, 用户配置信息
@@ -464,11 +508,13 @@ async def user_update_config(config: Dict=Body(), token:str= Header("token")) ->
         LastError.message = "输入的用户非法，不能修改"
         return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
     if GUserManage.update_user_setting(config):
-        return ResponseReturn(status=True, code=0, message="用户配置更新成功", data={"config": GUserManage.user_setting[config['name']]})
+        return ResponseReturn(status=True, code=0, message="用户配置更新成功",
+                              data={"config": GUserManage.user_setting[config['name']]})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
+
 @app.post("/user/config/add", summary="添加用户配置信息", tags=["用户管理"])
-async def user_add_config(config: Dict=Body(), token:str= Header("token")) -> ResponseReturn:
+async def user_add_config(config: Dict = Body(), token: str = Header("token")) -> ResponseReturn:
     """## 添加用户配置信息
     - Parameters:
         - userSetting: Dict, 用户配置信息
@@ -491,11 +537,13 @@ async def user_add_config(config: Dict=Body(), token:str= Header("token")) -> Re
         LastError.message = "用户配置添加失败"
         return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
     if GUserManage.add_user_setting(config):
-        return ResponseReturn(status=True, code=0, message="用户配置添加成功", data={"config": GUserManage.user_setting[config['name']]})
+        return ResponseReturn(status=True, code=0, message="用户配置添加成功",
+                              data={"config": GUserManage.user_setting[config['name']]})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
+
 @app.post("/user/config/del", summary="删除用户配置信息", tags=["用户管理"])
-async def user_del_config(config: Dict=Body(), token:str= Header("token")) -> ResponseReturn:
+async def user_del_config(config: Dict = Body(), token: str = Header("token")) -> ResponseReturn:
     """## 删除用户配置信息
     - Parameters:
         - userSetting: Dict, 用户配置信息
@@ -514,8 +562,10 @@ async def user_del_config(config: Dict=Body(), token:str= Header("token")) -> Re
         LastError.message = "用户配置删除失败"
         return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
     if GUserManage.del_user_setting(config['name']):
-        return ResponseReturn(status=True, code=0, message="用户配置删除成功", data={"config": GUserManage.user_setting})
+        return ResponseReturn(status=True, code=0, message="用户配置删除成功",
+                              data={"config": GUserManage.user_setting})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
+
 
 """END
 用户管理模块 请求路径与方法
@@ -523,6 +573,8 @@ async def user_del_config(config: Dict=Body(), token:str= Header("token")) -> Re
 
 """# 视觉管理模块
 """
+
+
 class VisionBase(BaseModel):
     """## VisionBase模型表示视觉参数
     - ip: string, IP地址
@@ -535,6 +587,7 @@ class VisionBase(BaseModel):
     username: str = "admin"
     password: str = "abcd1234"
 
+
 class VisionPose(BaseModel):
     """## VisionPose模型表示p、t和z参数
     - **lChannel**: int, 通道号，1-可见光，2-热成像
@@ -543,6 +596,7 @@ class VisionPose(BaseModel):
     - **wTiltPos**: int, 云台垂直方向控制，范围-900-900
     - **wZoomPos**: int, 云台变倍控制，范围10-320
     """
+    lUserId: int = 0  # 云台登录id
     lChannel: int = 1  # 通道号，1-可见光，2-热成像
     wAction: int = 1  # 1-定位PTZ参数，2-定位P参数，3-定位T参数，4-定位Z参数，5-定位PT参数
     wPanPos: int = 0  # 云台水平方向控制，范围0-3600
@@ -565,8 +619,9 @@ class VisionEvent(BaseModel):
     # 定义事件信息返回结构
     command: int = 0  # 事件码，0-无事件
     code: int = 0  # 事件类型，0-无事件，1-人形检测，2-人形跟踪，3-人形识别，4-人形追踪识别
-    message: str ="" # 事件信息
-    other: str  ="" # 其他信息
+    message: str = ""  # 事件信息
+    other: str = ""  # 其他信息
+
 
 class VisionSetting(BaseModel):
     """## 定义配置信息结构体
@@ -582,8 +637,11 @@ class VisionSetting(BaseModel):
     """
     command: List[CommandBase] = []
     file_path: Dict = {}
-   
+
+
 GVisionSetting = APP_DB["VisionSetting"]
+
+
 class VisionManage:
     """# 海康威视，微影摄像头服务模块
     """
@@ -608,18 +666,20 @@ class VisionManage:
 
         # self.setting: dict = VisionSetting(**GVisionSetting).dict()
 
-    def login(self,base: VisionBase = VisionBase()) -> bool:
+    def login(self, base: VisionBase = VisionBase()) -> bool:
         # 登录设备
         self.ip = base.ip
         self.port = base.port
         self.username = base.username
         self.password = base.password
         return True
+
     def get_config(self) -> bool:
         # 获取配置信息
         self.setting: dict = VisionSetting(**GVisionSetting).dict()
         return True
-    def set_config(self, setting:dict) -> bool:
+
+    def set_config(self, setting: dict) -> bool:
         # 设置配置信息
         GVisionSetting = setting
         if self.get_config():
@@ -627,7 +687,8 @@ class VisionManage:
             APP_JsonDB.save(APP_DB)
             return True
         return False
-    def update_config(self,setting:dict) -> bool:
+
+    def update_config(self, setting: dict) -> bool:
         # 更新配置信息
         for key in setting.keys():
             if key in GVisionSetting.keys():
@@ -637,18 +698,15 @@ class VisionManage:
             APP_JsonDB.save(APP_DB)
             return True
         return False
-    def get_pose(self,lChannel: int = 1) -> bool:
+
+    def get_pose(self, lChannel: int = 1) -> bool:
         #  获取摄像头云台位置信息
         self.pose.lChannel = lChannel
         return True
 
-    def set_pose(self, pose:VisionPose) -> bool:
+    def set_pose(self, pose: VisionPose) -> bool:
         #  设置摄像头云台位置信息
-        self.pose.lChannel = lChannel
-        self.pose.wAction = wAction
-        self.pose.wPanPos = wPanPos
-        self.pose.wTiltPos = wTiltPos
-        self.pose.wZoomPos = wZoomPos
+        self.pose = pose
         return True
 
     def preset(self, lChannel: int = 1, dwPTZPresetCmd: int = 39, dwPresetIndex: int = 1) -> bool:
@@ -664,13 +722,13 @@ GVisionManage = VisionManage()
 视觉管理模块VisionManage
 """
 
-
 """
 视觉管理模块 请求路径与方法
 """
 
+
 @app.post("/user/vision/login", summary="登录摄像头", tags=["视觉管理"])
-async def vision_login(base:VisionBase = Body(embed=True)) -> ResponseReturn:
+async def vision_login(base: VisionBase = Body(embed=True)) -> ResponseReturn:
     """## 登录摄像头
     - Parameters:
         - VisionBase 设备信息
@@ -691,8 +749,9 @@ async def vision_login(base:VisionBase = Body(embed=True)) -> ResponseReturn:
         return ResponseReturn(status=True, code=0, message="Login success", data={'base': base})
     return ResponseReturn(status=False, code=LastError, message=LastError.message, data=LastError)
 
+
 @app.get("/user/vision/config", summary="获取视觉模块的配置", tags=["视觉管理"])
-async def vision_get_config(ip:str = Body("192.168.1.64")) -> ResponseReturn:
+async def vision_get_config(ip: str = Body("192.168.1.64")) -> ResponseReturn:
     """## 获取视觉模块的配置
     - 参数：
         - ip: str = "", 设备ip地址(非必须)
@@ -703,11 +762,13 @@ async def vision_get_config(ip:str = Body("192.168.1.64")) -> ResponseReturn:
     """
     LastError = LastErrorBase()
     if GVisionManage.get_config():
-        return ResponseReturn(status=True, code=0, message="Get vision config success", data={'config': GVisionManage.setting})
+        return ResponseReturn(status=True, code=0, message="Get vision config success",
+                              data={'config': GVisionManage.setting})
     return ResponseReturn(status=False, code=LastError, message=LastError.message, data=LastError)
 
-@app.post("/user/vision/config", summary="设置视觉模块的配置", tags=["视觉管理"],include_in_schema=False)
-async def vision_set_config(config: dict = Body(),ip:str = Body("192.168.1.64")) -> ResponseReturn:
+
+@app.post("/user/vision/config", summary="设置视觉模块的配置", tags=["视觉管理"], include_in_schema=False)
+async def vision_set_config(config: dict = Body(), ip: str = Body("192.168.1.64")) -> ResponseReturn:
     """## 设置视觉模块的配置
     - 参数：
         - config: dict 配置信息
@@ -719,11 +780,13 @@ async def vision_set_config(config: dict = Body(),ip:str = Body("192.168.1.64"))
     """
     LastError = LastErrorBase()
     if GVisionManage.set_config(config):
-        return ResponseReturn(status=True, code=0, message="Set vision config success", data={'config': GVisionManage.setting})
+        return ResponseReturn(status=True, code=0, message="Set vision config success",
+                              data={'config': GVisionManage.setting})
     return ResponseReturn(status=False, code=LastError, message=LastError.message, data=LastError)
 
+
 @app.post("/user/vision/config/update", summary="更新视觉模块的配置", tags=["视觉管理"])
-async def vision_update_config(config: dict = Body(),ip:str = Body("192.168.1.64")) -> ResponseReturn:
+async def vision_update_config(config: dict = Body(), ip: str = Body("192.168.1.64")) -> ResponseReturn:
     """## 更新视觉模块的配置
     - 参数：
         - config: dict  配置信息(**更新传入的键值**，比如传入command或者file_path)
@@ -758,11 +821,13 @@ async def vision_update_config(config: dict = Body(),ip:str = Body("192.168.1.64
     """
     LastError = LastErrorBase()
     if GVisionManage.update_config(config):
-        return ResponseReturn(status=True, code=0, message="Update vision config success", data={'config': GVisionManage.setting})
+        return ResponseReturn(status=True, code=0, message="Update vision config success",
+                              data={'config': GVisionManage.setting})
     return ResponseReturn(status=False, code=LastError, message=LastError.message, data=LastError)
 
+
 @app.get("/user/vision/pose", summary="获取摄像头的PTZ坐标角度信息", tags=["视觉管理"])
-async def vision_get_pose(pose: VisionPose = VisionPose(lChannel=1),ip:str=Body(None)) -> ResponseReturn:
+async def vision_get_pose(pose: VisionPose = VisionPose(lUserId=0, lChannel=1), ip: str = Body(None)) -> ResponseReturn:
     """# 获取摄像头的PTZ坐标角度信息
     - 参数：
         - VisionPose 视觉信息
@@ -776,7 +841,8 @@ async def vision_get_pose(pose: VisionPose = VisionPose(lChannel=1),ip:str=Body(
         ip = GVisionManage.ip
         print(ip)
     if GVisionManage.get_pose(pose.lChannel):
-        return ResponseReturn(status=True, code=0, message="Get vision pose success1", data={'pose': GVisionManage.pose, 'ip': ip})
+        return ResponseReturn(status=True, code=0, message="Get vision pose success1",
+                              data={'pose': GVisionManage.pose, 'ip': ip})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 
@@ -785,17 +851,20 @@ async def vision_set_pose(pose: VisionPose) -> ResponseReturn:
     """# 设置摄像头的PTZ坐标角度信息
     - 参数：
         - VisionPose 视觉信息模型
-            - lChannel: int = 1, 通道号，1-可见光，2-热成像
+            - lUserId: int = 0, 用户登录接口返回值,默认0
+            - lChannel: int = 1, 通道号，1-可见光，2-热成像， 默认1
             - wAction: int =1, 1-定位PTZ参数，2-定位P参数，3-定位T参数，4-定位Z参数，5-定位PT参数
             - wPanPos: int  =0, 云台水平方向控制，范围0-3600
             - wTiltPos: int  =0, 云台垂直方向控制，范围-900-900
             - wZoomPos: int  =10, 云台变倍控制，范围10-320
     - 示例：
         - {'pose':VisionPose} 视觉信息
+        - {"lUserId":0,"lChannel":1,"wAction": 1,"wPanPos":0,"wTiltPos":0,"wZoomPos":10}
     """
     LastError = LastErrorBase()
-    if GVisionManage.set_pose(pose.ID, pose.lChannel, pose.wAction, pose.wPanPos, pose.wTiltPos, pose.wZoomPos):
-        return ResponseReturn(status=True, code=0, message="Set vision pose success", data={'pose': GVisionManage.pose})
+    if GVisionManage.set_pose(pose):
+        return ResponseReturn(status=True, code="/user/vision/pose", message="Set vision pose success",
+                              data={'pose': GVisionManage.pose})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 
@@ -812,13 +881,16 @@ async def vision_preset(preset: VisionPreset) -> ResponseReturn:
     if GVisionManage.preset(preset.lChannel, preset.dwPTZPresetCmd, preset.dwPresetIndex):
         return ResponseReturn(status=True, code=0, message="Set vision preset success")
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
+
+
 """END
 视觉管理模块 请求路径与方法
 """
 
-
 """# 机器人相关模块
 """
+
+
 # 模型不支持类中定义，需要定义为全局变量
 
 class RobotBase(BaseModel):
@@ -829,8 +901,8 @@ class RobotBase(BaseModel):
         - username: str = "admin", 机器人用户名
         - password: str = "dc123456", 机器人密码
     """
-    ip: str = "1"       # 机器人ip，唯一标识，为ip地址
-    port: int = 8000    # 机器人端口号
+    ip: str = "1"  # 机器人ip，唯一标识，为ip地址
+    port: int = 8000  # 机器人端口号
     username: str = "admin"  # 机器人用户名
     password: str = "dc123456"  # 机器人密码
 
@@ -842,73 +914,44 @@ class RobotPose(BaseModel):
         - y: float = 0, 任务点位置y坐标
         - theta: float = 0, 任务点朝向X角度
     """
-    x: float = 0       # 任务点位置x坐标
-    y: float = 0       # 任务点位置y坐标
-    theta: float = 0   # 任务点朝向X角度
+    x: float = 0  # 任务点位置x坐标
+    y: float = 0  # 任务点位置y坐标
+    theta: float = 0  # 任务点朝向X角度
 
 
 class RobotAction(BaseModel):
     # 定义RobotAction模型表示任务点动作参数列表
     actionContent: str = ""  # 执行动作时长，秒数
-    actionType: str = ""     # 动作类型，可填值"rotation":选择 "stop":停止
-    actionName: str = ""     # 动作名称
-    actionOrder: int = 0    # 执行动作顺序号，0为最优先处理
+    actionType: str = ""  # 动作类型，可填值"rotation":选择 "stop":停止
+    actionName: str = ""  # 动作名称
+    actionOrder: int = 0  # 执行动作顺序号，0为最优先处理
 
 
 class RobotPoints(BaseModel):
     # 定义RobotPoints模型表示任务点参数列表
     position: RobotPose = RobotPose()  # 任务点位置
-    pointType: str = ""      # 子任务点类型 可填值 "navigation":导航点， "charge":充电点，未填写默认为导航点
+    pointType: str = ""  # 子任务点类型 可填值 "navigation":导航点， "charge":充电点，未填写默认为导航点
     # 子任务点动作列表，目前只支持一个动作，第一个动作
     actions: List[RobotAction] = [RobotAction()]
-    pointName: str = ""    # 任务点名称
-    index: int = 0        # 任务点索引
-    isNew: bool = False       # 是否是新建的任务点
-    cpx: float = 0      # 任务点位置x坐标
-    cpy: float = 0     # 任务点位置y坐标
+    pointName: str = ""  # 任务点名称
+    index: int = 0  # 任务点索引
+    isNew: bool = False  # 是否是新建的任务点
+    cpx: float = 0  # 任务点位置x坐标
+    cpy: float = 0  # 任务点位置y坐标
 
 
 class RobotTask(BaseModel):
-    """## 定义RobotTask模型表示任务点列表
-    - 参数：
-        - taskName: str = "task"  # 任务名称
-        - gridItemIdx: int = 0  # web前端显示所需要的索引
-        - points: List[RobotPoints] = [RobotPoints()]   # 任务点列表，详细参考下面的任务点参数表
-            - position: RobotPose = RobotPose()  # 任务点位置
-                - x: float = 0, 任务点位置x坐标
-                - y: float = 0, 任务点位置y坐标
-                - theta: float = 0, 任务点朝向X角度
-            - pointType: str = ""      # 子任务点类型 可填值 "navigation":导航点， "charge":充电点，未填写默认为导航点
-            - actions: List[RobotAction] = [RobotAction()]  # 子任务点动作列表，目前只支持一个动作，第一个动作
-                - actionContent: str = ""  # 执行动作时长，秒数
-                - actionType: str = ""     # 动作类型，可填值"rotation":选择 "stop":停止
-                - actionName: str = ""     # 动作名称
-                - actionOrder: int = 0    # 执行动作顺序号，0为最优先处理
-            - pointName: str = ""    # 任务点名称
-            - index: int = 0        # 任务点索引
-            - isNew: bool = False       # 是否是新建的任务点
-            - cpx: float = 0      # 任务点位置x坐标
-            - cpy: float = 0     # 任务点位置y坐标
-        - mode: str = ""      # 任务模式， "point":多点导航 "path":路径导航
-        - evadible: int = 1  # 避障模式，1避障，2停障
-        - mapName: str = "taskMap"   # 地图名称
-        - speed: float = 0.5     # 导航时的速度参数0.1-1.5M/S
-        - editedName: str = ""  # 任务需要重命名的名称
-        - remark: str = "remark"   # 备注信息
-        - personName: str = "tang"  # 任务创建人
-
-    """
     taskName: str = "task"  # 任务名称
     gridItemIdx: int = 0  # web前端显示所需要的索引
-    points: List[RobotPoints] = [RobotPoints()]    # 任务点列表，详细参考下面的任务点参数表
-    mode: str = ""      # 任务模式， "point":多点导航 "path":路径导航
+    points: List[RobotPoints] = [RobotPoints()]  # 任务点列表，详细参考下面的任务点参数表
+    mode: str = ""  # 任务模式， "point":多点导航 "path":路径导航
     evadible: int = 1  # 避障模式，1避障，2停障
-    mapName: str = "taskMap"   # 地图名称
-    speed: float = 0.5 #= Field(0.6, gt=0, lt=1.5)     # 导航时的速度参数0.1-1.5M/S
+    mapName: str = "taskMap"  # 地图名称
+    speed: float = 0.5  # = Field(0.6, gt=0, lt=1.5)     # 导航时的速度参数0.1-1.5M/S
     editedName: str = ""  # 任务需要重命名的名称
-    remark: str = "remark"   # 备注信息
+    remark: str = "remark"  # 备注信息
     personName: str = "tang"  # 任务创建人
-    
+
     @validator('speed')
     def speed_coerce(cls, v):
         # 导航时的速度参数0.1-1.5M/S
@@ -922,16 +965,17 @@ class RobotTask(BaseModel):
 class RobotRealTimePoint(BaseModel):
     # 定义RobotRealTimePoint模型表示任务点列表
     position: RobotPose = RobotPose()  # 任务点位置
-    isNew: bool = False      # 注意只有"mode"="path"的路径模式下有效，决定是否是新路径点的起点
-    cpx: float = 0      # 曲线点x坐标，注意只有"mode"="path"的路径模式下，曲线点有效，将线段上的某个点作为贝塞尔曲线点
-    cpy: float = 0      # 曲线点y坐标，注意只有"mode"="path"的路径模式下，曲线点有效，将线段上的某个点作为贝塞尔曲线点
+    isNew: bool = False  # 注意只有"mode"="path"的路径模式下有效，决定是否是新路径点的起点
+    cpx: float = 0  # 曲线点x坐标，注意只有"mode"="path"的路径模式下，曲线点有效，将线段上的某个点作为贝塞尔曲线点
+    cpy: float = 0  # 曲线点y坐标，注意只有"mode"="path"的路径模式下，曲线点有效，将线段上的某个点作为贝塞尔曲线点
 
 
 class RobotRealTimeTask(BaseModel):
     # 定义RobotRealTimeTask模型表示实时任务请求模型
     loopTime: int = 1  # 循环次数
     points: List[RobotRealTimePoint] = [RobotRealTimePoint()]  # 实时任务模型任务点列表
-    mode: str = ""      # 导航类型，可能值为 "point":多点导航 "path":多路径导航
+    mode: str = ""  # 导航类型，可能值为 "point":多点导航 "path":多路径导航
+
 
 # actions: Dict[str, RobotTask] = {}
 
@@ -981,6 +1025,7 @@ class RobotStatus(BaseModel):
     sensor: Dict[str, str] = {"imu_status": "ON", "lidar_status": "ON",
                               "RTK_status": "OFF", "camera_status": "OFF"}  # 机器人传感器状态
 
+
 """# 机器人上报的日志相关模块
 """
 
@@ -997,6 +1042,7 @@ class RobotLog(BaseModel):
     stamp: Dict[str, int] = {"sec": 1680848214, "nsec": 679842222}
     level: int = 2
     msg: str = ""
+
 
 class RobotSetting(BaseModel):
     """# 定义RobotSetting模型表示机器人配置
@@ -1052,8 +1098,9 @@ class RobotSetting(BaseModel):
     curisePoints: List[Dict]
 
 
+GRobotSetting = APP_DB["RobotSetting"]
 
-GRobotSetting  = APP_DB["RobotSetting"]
+
 class RobotManage:
     """# 机器人管理类
     """
@@ -1081,8 +1128,8 @@ class RobotManage:
         self.password = password
         # self.Authorization = self.login()
         self.setting: dict = RobotSetting(**GRobotSetting).dict()
-    
-    def login(self,base:RobotBase = RobotBase())->bool:
+
+    def login(self, base: RobotBase = RobotBase()) -> bool:
         # 登录设备
         self.ip = base.ip
         self.port = base.port
@@ -1094,10 +1141,12 @@ class RobotManage:
         # 获取机器人配置信息
         self.setting: dict = RobotSetting(**GRobotSetting).dict()
         return True
-    def set_config(self,config:RobotSetting)->bool:
+
+    def set_config(self, config: RobotSetting) -> bool:
         # 设置机器人配置信息
         return True
-    def update_config(self,setting:dict)->bool:
+
+    def update_config(self, setting: dict) -> bool:
         # 更新机器人配置信息
         for key in setting.keys():
             if key in GRobotSetting.keys():
@@ -1107,6 +1156,7 @@ class RobotManage:
             APP_JsonDB.save(APP_DB)
             return True
         return False
+
     def get_status(self) -> bool:
         # 获取机器人状态信息
         return True
@@ -1173,10 +1223,10 @@ GRobotManage = RobotManage()
 # 机器人管理模块
 """
 
-
 """
 机器人管理模块 请求路径与方法
 """
+
 
 @app.post("/user/robot/login", summary="登录机器人", tags=["机器人管理"])
 async def robot_login(base: RobotBase = RobotBase()) -> ResponseReturn:
@@ -1193,11 +1243,12 @@ async def robot_login(base: RobotBase = RobotBase()) -> ResponseReturn:
     """
     LastError = LastErrorBase()
     if GRobotManage.login(base):
-        return ResponseReturn(status=True, code=0, message="Login robot success.", data={"base":base})
+        return ResponseReturn(status=True, code=0, message="Login robot success.", data={"base": base})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
+
 @app.get("/user/robot/config", summary="获取机器人配置信息", tags=["机器人管理"])
-async def robot_get_config(ip:str = Body("1")) -> ResponseReturn:
+async def robot_get_config(ip: str = Body("1")) -> ResponseReturn:
     """## 获取机器人配置信息
     - 参数：
         - ip: str 机器人ip (可不填)
@@ -1208,11 +1259,13 @@ async def robot_get_config(ip:str = Body("1")) -> ResponseReturn:
     """
     LastError = LastErrorBase()
     if GRobotManage.get_config():
-        return ResponseReturn(status=True, code=0, message="Get robot config success.", data={"config":GRobotManage.setting})
+        return ResponseReturn(status=True, code=0, message="Get robot config success.",
+                              data={"config": GRobotManage.setting})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
+
 @app.post("/user/robot/config/update", summary="更新机器人配置信息", tags=["机器人管理"])
-async def robot_update_config(config: dict = Body(),ip:str = Body("1")) -> ResponseReturn:
+async def robot_update_config(config: dict = Body(), ip: str = Body("1")) -> ResponseReturn:
     """## 更新机器人配置信息
     - 参数：
         - config: dict 机器人配置信息
@@ -1255,11 +1308,13 @@ async def robot_update_config(config: dict = Body(),ip:str = Body("1")) -> Respo
     """
     LastError = LastErrorBase()
     if GRobotManage.update_config(config):
-        return ResponseReturn(status=True, code=0, message="Update robot config success.", data={"config":GRobotManage.setting})
+        return ResponseReturn(status=True, code=0, message="Update robot config success.",
+                              data={"config": GRobotManage.setting})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
+
 @app.get("/user/robot/status", summary="获取机器人状态相关的信息", tags=["机器人管理"])
-async def robot_get_status(ip:str = Body("1")) -> ResponseReturn:
+async def robot_get_status(ip: str = Body("1")) -> ResponseReturn:
     """## 获取机器人状态相关的信息
     - 参数：
         - ip: str 机器人ip (可不填)
@@ -1268,12 +1323,13 @@ async def robot_get_status(ip:str = Body("1")) -> ResponseReturn:
     """
     LastError = LastErrorBase()
     if GRobotManage.get_status():
-        return ResponseReturn(status=True, code=0, message="Get robot status success.", data={"status": GRobotManage.status})
+        return ResponseReturn(status=True, code=0, message="Get robot status success.",
+                              data={"status": GRobotManage.status})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 
 @app.get("/user/robot/pose", summary="获取机器人位置信息", tags=["机器人管理"])
-async def robot_get_pose(ip:str = Body("1")) -> ResponseReturn:
+async def robot_get_pose(ip: str = Body("1")) -> ResponseReturn:
     """## 获取机器人位置信息
     - 参数：
         - ip: str 机器人ip (可不填)
@@ -1287,7 +1343,7 @@ async def robot_get_pose(ip:str = Body("1")) -> ResponseReturn:
 
 
 @app.post("/user/robot/pose", summary="设置机器人位置信息", tags=["机器人管理"])
-async def robot_set_pose(pose: RobotPose,ip:str = Body("1")) -> ResponseReturn:
+async def robot_set_pose(pose: RobotPose, ip: str = Body("1")) -> ResponseReturn:
     """## 设置机器人位置信息
     - 参数：
         - pose: RobotPose 机器人位置信息（必须）
@@ -1302,12 +1358,13 @@ async def robot_set_pose(pose: RobotPose,ip:str = Body("1")) -> ResponseReturn:
     """
     LastError = LastErrorBase()
     if GRobotManage.set_pose(pose):
-        return ResponseReturn(status=True, code=0, message="Set robot pose success.", data={"pose": GRobotManage.pose})
+        return ResponseReturn(status=True, code="/user/robot/pose", message="Set robot pose success.",
+                              data={"pose": GRobotManage.pose})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 
 @app.get("/user/robot/task", summary="获取地图任务路径信息", tags=["机器人管理"])
-async def robot_get_task(ip:str = Body("1")) -> ResponseReturn:
+async def robot_get_task(ip: str = Body("1")) -> ResponseReturn:
     """## 获取地图任务路径信息
     - 参数：
         - ip: str 机器人ip (可不填)
@@ -1321,7 +1378,7 @@ async def robot_get_task(ip:str = Body("1")) -> ResponseReturn:
 
 
 @app.post("/user/robot/task", summary="设置地图任务路径信息", tags=["机器人管理"])
-async def robot_set_task(task: RobotTask,ip:str = Body("1")) -> ResponseReturn:
+async def robot_set_task(task: RobotTask, ip: str = Body("1")) -> ResponseReturn:
     """## 设置地图任务路径信息
     - 参数：
         - RobotTask 任务信息模型
@@ -1332,14 +1389,14 @@ async def robot_set_task(task: RobotTask,ip:str = Body("1")) -> ResponseReturn:
         - {"task":RobotTask 任务信息}
     """
     LastError = LastErrorBase()
-    print( task.taskName)
+    print(task.taskName)
     if GRobotManage.set_task(task):
         return ResponseReturn(status=True, code=0, message="Set robot task success.", data={"task": GRobotManage.task})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 
 @app.get("/user/robot/tasks", summary="获取所有机器人任务信息", tags=["机器人管理"])
-async def robot_get_tasks(ip:str = Body("1")) -> ResponseReturn:
+async def robot_get_tasks(ip: str = Body("1")) -> ResponseReturn:
     """## 获取所有机器人任务路径信息
     - 参数：
         - ip: str 机器人ip (可不填)
@@ -1348,12 +1405,13 @@ async def robot_get_tasks(ip:str = Body("1")) -> ResponseReturn:
     """
     LastError = LastErrorBase()
     if GRobotManage.get_tasks():
-        return ResponseReturn(status=True, code=0, message="Get robot task list success.", data={"tasks": GRobotManage.tasks})
+        return ResponseReturn(status=True, code=0, message="Get robot task list success.",
+                              data={"tasks": GRobotManage.tasks})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 
 @app.post("/user/robot/tasks", summary="设置机器人所有任务信息", tags=["机器人管理"])
-async def robot_set_tasks(tasks: Dict[str, RobotTask],ip:str = Body("1")) -> ResponseReturn:
+async def robot_set_tasks(tasks: Dict[str, RobotTask], ip: str = Body("1")) -> ResponseReturn:
     """## 设置所有机器人实时任务信息
     - 参数：
         - tasks:Dict[str,RobotTask] 任务信息字典
@@ -1365,12 +1423,13 @@ async def robot_set_tasks(tasks: Dict[str, RobotTask],ip:str = Body("1")) -> Res
     """
     LastError = LastErrorBase()
     if GRobotManage.set_tasks(tasks):
-        return ResponseReturn(status=True, code=0, message="Set robot task slist success.", data={"tasks": GRobotManage.tasks})
+        return ResponseReturn(status=True, code=0, message="Set robot task slist success.",
+                              data={"tasks": GRobotManage.tasks})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 
 @app.post("/user/robot/tasks/update", summary="更新机器人任务信息", tags=["机器人管理"])
-async def robot_update_tasks(tasks: Dict[str, RobotTask],ip:str = Body("1")) -> ResponseReturn:
+async def robot_update_tasks(tasks: Dict[str, RobotTask], ip: str = Body("1")) -> ResponseReturn:
     """## 更新所有机器人实时任务信息
     - 参数：
         - tasks:Dict[str,RobotTask] 任务信息字典
@@ -1382,12 +1441,13 @@ async def robot_update_tasks(tasks: Dict[str, RobotTask],ip:str = Body("1")) -> 
     """
     LastError = LastErrorBase()
     if GRobotManage.update_tasks(tasks):
-        return ResponseReturn(status=True, code=0, message="Update robot task list success.", data={"tasks": GRobotManage.tasks})
+        return ResponseReturn(status=True, code=0, message="Update robot task list success.",
+                              data={"tasks": GRobotManage.tasks})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 
 @app.post("/user/robot/tasks/add", summary="添加机器人的一个任务信息", tags=["机器人管理"])
-async def robot_add_tasks(task: RobotTask = RobotTask(),ip:str = Body("1")) -> ResponseReturn:
+async def robot_add_tasks(task: RobotTask = RobotTask(), ip: str = Body("1")) -> ResponseReturn:
     """## 添加机器人的一个任务信息
     - 参数：
         - RobotTask 任务信息字典
@@ -1400,12 +1460,13 @@ async def robot_add_tasks(task: RobotTask = RobotTask(),ip:str = Body("1")) -> R
     """
     LastError = LastErrorBase()
     if GRobotManage.add_task(task):
-        return ResponseReturn(status=True, code=0, message="Add robot task success.", data={"tasks": GRobotManage.tasks})
+        return ResponseReturn(status=True, code=0, message="Add robot task success.",
+                              data={"tasks": GRobotManage.tasks})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 
 @app.post("/user/robot/tasks/delete", summary="删除机器人的一个任务信息", tags=["机器人管理"])
-async def robot_delete_tasks(task: RobotTask,ip:str = Body("1")) -> ResponseReturn:
+async def robot_delete_tasks(task: RobotTask, ip: str = Body("1")) -> ResponseReturn:
     """# 删除机器人的一个任务信息
     - 参数：
         - RobotTask 任务信息字典
@@ -1419,8 +1480,10 @@ async def robot_delete_tasks(task: RobotTask,ip:str = Body("1")) -> ResponseRetu
     """
     LastError = LastErrorBase()
     if GRobotManage.del_task(task.taskName):
-        return ResponseReturn(status=True, code=0, message="Delete robot task list success.", data={"tasks": GRobotManage.tasks})
+        return ResponseReturn(status=True, code=0, message="Delete robot task list success.",
+                              data={"tasks": GRobotManage.tasks})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
+
 
 """END
 机器人管理模块 请求路径与方法
@@ -1428,6 +1491,7 @@ async def robot_delete_tasks(task: RobotTask,ip:str = Body("1")) -> ResponseRetu
 
 """# 传感器管理模块
 """
+
 
 class SensorBase(BaseModel):
     """传感器基础信息
@@ -1441,6 +1505,7 @@ class SensorBase(BaseModel):
     port: int = 31024
     name: str = "传感器"
     description: str = ""
+
 
 class SensorRobotData(SensorBase):
     """# 该项目消防机器人传感器数据
@@ -1457,26 +1522,32 @@ class SensorRobotData(SensorBase):
     smoke: float = 0.0
     fire: int = 0
 
-GSensorRobotData = SensorRobotData().dict()    
+
+GSensorRobotData = SensorRobotData().dict()
+
+
 class SensorManage:
     # 传感器信息管理类
     def __init__(self):
-        self.sensor:dict = SensorRobotData(**GSensorRobotData).dict()
+        self.sensor: dict = SensorRobotData(**GSensorRobotData).dict()
+
     def get_data(self) -> bool:
         # 获取传感器数据
-        self.sensor:dict = SensorRobotData(**GSensorRobotData).dict()
+        self.sensor: dict = SensorRobotData(**GSensorRobotData).dict()
         return True
 
-    def set_sensor(self, sensor:dict) -> bool:
+    def set_sensor(self, sensor: dict) -> bool:
         # 设置传感器数据
         GSensorRobotData.update(sensor)
         if self.get_data():
             return True
         return False
-    def set_fire(self, fire:int) -> bool:
+
+    def set_fire(self, fire: int) -> bool:
         # 设置消防机器人灭火开关
         self.sensor.fire = fire
         return
+
 
 GSensorManage = SensorManage()
 """END
@@ -1486,8 +1557,9 @@ GSensorManage = SensorManage()
 """# 传感器管理模块 请求路径与方法
 """
 
+
 @app.get("/user/sensor/data", summary="获取传感器数据", tags=["传感器管理"])
-async def sensor_get_data(sensor:dict = Body(None,embed=True)) -> ResponseReturn:
+async def sensor_get_data(sensor: dict = Body(None, embed=True)) -> ResponseReturn:
     """## 获取传感器数据
     - 参数：
         - dict 传感器数据(目前可不用填写)
@@ -1501,11 +1573,13 @@ async def sensor_get_data(sensor:dict = Body(None,embed=True)) -> ResponseReturn
     """
     LastError = LastErrorBase()
     if GSensorManage.get_data():
-        return ResponseReturn(status=True, code=0, message="Get sensor data success.", data={"sensor": GSensorManage.sensor})
+        return ResponseReturn(status=True, code=0, message="Get sensor data success.",
+                              data={"sensor": GSensorManage.sensor})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
+
 @app.post("/user/sensor/data", summary="设置传感器数据", tags=["传感器管理"])
-async def sensor_set_data(sensor:dict = Body(SensorBase(),embed=True)) -> ResponseReturn:
+async def sensor_set_data(sensor: dict = Body(SensorBase(), embed=True)) -> ResponseReturn:
     """## 设置传感器数据
     - 参数：
         - SensorBase 传感器数据（可设置默认值，非必填，不填写则设置为默认值）
@@ -1520,11 +1594,13 @@ async def sensor_set_data(sensor:dict = Body(SensorBase(),embed=True)) -> Respon
     """
     LastError = LastErrorBase()
     if GSensorManage.set_sensor(SensorBase(**sensor).dict()):
-        return ResponseReturn(status=True, code=0, message="Set sensor data success.", data={"sensor": GSensorManage.sensor})
+        return ResponseReturn(status=True, code=0, message="Set sensor data success.",
+                              data={"sensor": GSensorManage.sensor})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
+
 @app.post("/user/sensor/fire", summary="设置消防机器人灭火开关", tags=["传感器管理"])
-async def sensor_set_fire(sensor:SensorRobotData = Body(SensorRobotData(),embed=True)) -> ResponseReturn:
+async def sensor_set_fire(sensor: SensorRobotData = Body(SensorRobotData(), embed=True)) -> ResponseReturn:
     """## 设置消防机器人灭火开关
     - 参数：
         - SensorRobotData 传感器数据
@@ -1544,12 +1620,15 @@ async def sensor_set_fire(sensor:SensorRobotData = Body(SensorRobotData(),embed=
     """
     LastError = LastErrorBase()
     if GSensorManage.set_fire(sensor.fire):
-        return ResponseReturn(status=True, code=0, message="Set sensor fire data success.", data={"sensor": GSensorManage.sensor})
+        return ResponseReturn(status=True, code=0, message="Set sensor fire data success.",
+                              data={"sensor": GSensorManage.sensor})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
+
 
 """END
 # 传感器管理模块 请求路径与方法
 """
+
 
 class EventBase(BaseModel):
     """事件基础信息
@@ -1588,14 +1667,14 @@ class EventsManage:
         self.events[event.ID] = event
         return True
 
-    def del_event(self, ID:str) -> bool:
+    def del_event(self, ID: str) -> bool:
         # 删除一个事件信息
         if ID in self.events.keys():
             self.events.pop(ID)
             return True
         return False
 
-    def get_event(self, ID:str) -> bool:
+    def get_event(self, ID: str) -> bool:
         # 获取一个事件信息
         if ID in self.events.keys():
             return True
@@ -1606,7 +1685,6 @@ GEventsManage = EventsManage()
 """END
 # 事件信息管理模块
 """
-
 
 """# 事件管理模块 请求路径与方法
 """
@@ -1622,11 +1700,13 @@ async def events_get_events() -> ResponseReturn:
     """
     LastError = LastErrorBase()
     if GEventsManage.get_events():
-        return ResponseReturn(status=True, code=0, message="Get events list success.", data={"events": GEventsManage.events})
+        return ResponseReturn(status=True, code=0, message="Get events list success.",
+                              data={"events": GEventsManage.events})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
+
 @app.get("/user/events/{ID}", summary="获取一个事件信息", tags=["事件信息管理"])
-async def events_get_event(ID:str) -> ResponseReturn:
+async def events_get_event(ID: str) -> ResponseReturn:
     """## 获取一个事件信息
     - 参数：
         - ID:str 事件ID，请求地址中获取，请求时填写
@@ -1637,11 +1717,13 @@ async def events_get_event(ID:str) -> ResponseReturn:
     """
     LastError = LastErrorBase()
     if GEventsManage.get_event(ID):
-        return ResponseReturn(status=True, code=0, message="Get event success.", data={"event": GEventsManage.events(ID)})
+        return ResponseReturn(status=True, code=0, message="Get event success.",
+                              data={"event": GEventsManage.events(ID)})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
+
 @app.post("/user/events", summary="设置所有事件信息", tags=["事件信息管理"])
-async def events_set_events(events: Dict[str, EventBase]=Body(embed=True)) -> ResponseReturn:
+async def events_set_events(events: Dict[str, EventBase] = Body(embed=True)) -> ResponseReturn:
     """## 设置所有事件信息
     - 参数：
         - events:Dict[str,EventBase] 事件信息字典
@@ -1652,12 +1734,13 @@ async def events_set_events(events: Dict[str, EventBase]=Body(embed=True)) -> Re
     """
     LastError = LastErrorBase()
     if GEventsManage.set_events(events):
-        return ResponseReturn(status=True, code=0, message="Set events list success.", data={"events": GEventsManage.events})
+        return ResponseReturn(status=True, code=0, message="Set events list success.",
+                              data={"events": GEventsManage.events})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 
 @app.post("/user/events/update", summary="更新事件信息", tags=["事件信息管理"])
-async def events_update_events(events: Dict[str, EventBase]=Body(embed=True)) -> ResponseReturn:
+async def events_update_events(events: Dict[str, EventBase] = Body(embed=True)) -> ResponseReturn:
     """# 更新所有事件信息
     - 参数：
         - events:Dict[str,EventBase] 事件信息字典
@@ -1668,12 +1751,13 @@ async def events_update_events(events: Dict[str, EventBase]=Body(embed=True)) ->
     """
     LastError = LastErrorBase()
     if GEventsManage.update_events(events):
-        return ResponseReturn(status=True, code=0, message="Update event list success.", data={"events": GEventsManage.events})
+        return ResponseReturn(status=True, code=0, message="Update event list success.",
+                              data={"events": GEventsManage.events})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 
 @app.post("/user/events/add", summary="添加一个事件信息", tags=["事件信息管理"])
-async def events_add_event(event: EventBase=Body(EventBase(),embed=True)) -> ResponseReturn:
+async def events_add_event(event: EventBase = Body(EventBase(), embed=True)) -> ResponseReturn:
     """# 添加一个事件信息
     - 参数：
         - EventBase 事件信息字典
@@ -1688,12 +1772,13 @@ async def events_add_event(event: EventBase=Body(EventBase(),embed=True)) -> Res
     """
     LastError = LastErrorBase()
     if GEventsManage.add_event(event):
-        return ResponseReturn(status=True, code=0, message="Add event list success.", data={"events": GEventsManage.events})
+        return ResponseReturn(status=True, code=0, message="Add event list success.",
+                              data={"events": GEventsManage.events})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
 
 
 @app.post("/user/events/del", summary="删除一个事件信息", tags=["事件信息管理"])
-async def events_del_event(event: EventBase=Body(EventBase(),embed=True)) -> ResponseReturn:
+async def events_del_event(event: EventBase = Body(EventBase(), embed=True)) -> ResponseReturn:
     """# 删除一个事件信息
     - 参数：
         - EventBase 事件信息字典
@@ -1705,8 +1790,11 @@ async def events_del_event(event: EventBase=Body(EventBase(),embed=True)) -> Res
     """
     LastError = LastErrorBase()
     if GEventsManage.del_event(event.ID):
-        return ResponseReturn(status=True, code=0, message="Delete event list success.", data={"events": GEventsManage.events})
+        return ResponseReturn(status=True, code=0, message="Delete event list success.",
+                              data={"events": GEventsManage.events})
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
+
+
 """END
 # 事件管理模块 请求路径与方法
 """
@@ -1726,6 +1814,7 @@ async def root():
     # return RedirectResponse(url="/docs",status_code=status.HTTP_302_FOUND)
     with open("api.html", encoding='utf-8') as f:
         return HTMLResponse(content=f.read(), status_code=200)
+
 
 class LogSettingBase(BaseModel):
     """## 日志设置信息
@@ -1751,7 +1840,10 @@ class LogSettingBase(BaseModel):
     maxtime: int = 24 * 60 * 60 * 7
     remark: str = ""
 
+
 GLogSetting = ConfigAPP["log"]
+
+
 @app.get("/other/log/config", summary="获取日志设置信息", tags=["其他"])
 async def other_log_config() -> ResponseReturn:
     """# 获取日志设置信息
@@ -1762,8 +1854,9 @@ async def other_log_config() -> ResponseReturn:
     """
     return ResponseReturn(status=True, code=0, message="Success", data={"config": GLogSetting})
 
+
 @app.post("/other/log/config/update", summary="更新日志设置信息", tags=["其他"])
-async def other_log_update_config(config = Body(embed=True)) -> ResponseReturn:
+async def other_log_update_config(config=Body(embed=True)) -> ResponseReturn:
     """## 更新日志设置信息
     - 参数：
         - config:LogSettingBase 日志设置信息
@@ -1776,13 +1869,14 @@ async def other_log_update_config(config = Body(embed=True)) -> ResponseReturn:
     if config:
         GLogSetting.update(config)
         # ConfigAPP["log"] = GLogSetting
-        with open(ConfigAPP_path,mode='w',encoding = 'utf-8') as f:
-            json.dump(ConfigAPP,f,ensure_ascii=False,indent=4)
+        with open(ConfigAPP_path, mode='w', encoding='utf-8') as f:
+            json.dump(ConfigAPP, f, ensure_ascii=False, indent=4)
         return ResponseReturn(status=True, code=0, message="Update log config success.", data={"config": GLogSetting})
     LastError.ERROR_TYPE = "LOG_CONFIG_ERROR"
     LastError.code = 400
     LastError.message = "Log config error."
     return ResponseReturn(status=False, code=-1, message=LastError.message, data=LastError)
+
 
 @app.post("other/command", summary="执行用户命令", tags=["其他"])
 async def other_command(command: CommandBase) -> ResponseReturn:
@@ -1825,29 +1919,49 @@ async def other_error() -> ResponseReturn:
     return ResponseReturn(status=True, code=0, message="Success", data={"lasterror": GLastError})
 
 
-class MeterBase(BaseModel):
-    code:int
-    point:str
-    url:str=""
-    data:Union[Dict,str] = ""
+from modules.method_meter import MeterHttpClient
 
-@app.post("/other/meter", summary="获取表计识别算法的结果" , tags=["其他"])
-async def other_meter(meter:MeterBase) -> ResponseReturn:
+# 获取当前文件所在的目录
+current_dir = os.path.dirname(__file__)
+
+meter_config_path = os.path.join(current_dir, 'config', 'config_meter.json')
+
+meter_client = MeterHttpClient(meter_config_path)
+
+
+@app.get("/other/meter", summary="获取表计识别算法的结果", tags=["其他"])
+async def other_meter(point_id: str, image_url: str):
     """## 请求表计识别数据
     - 参数:
-        - code: int 唯一标识，是表计的编码类别
-        - point:str = "1", 位置点参数，可选，唯一标识
-        - url?: str = "/image filename", 图片地址，可选
-        - data: 参数 params, 参数列表,为string类的字典数据类型,可选
-    - 示例
-        - 请求
-            - {"code":1,"point":"1","url":"D:/imgMeter/img.jpg","data":"{ \"id\":1}"}
-        - 返回
-            - {"status":False,"code":1,"message":"识别1成功",data:{"code":1,"point":"1","url":"D:/imgMeter/imgMeter.jpg","data":[1.2,3.4]}}
+        - point_id: str = "1", 表计炮号
+        - image_url: str = "/image filename", 图片地址
+        - 返回:
+            - {"status":True,"code":0,"message":"Success","data":{"image_url":"http file path","result":[123]}}
+    - 示例：
+        - 请求：
+            api/other/meter?point_id=1&image_url=D:/imgMeter/imgMeter.jpg
+        - 返回：
+            - {"status":True,"code":0,"message":"Success","data":{"image_url":"http file path","result":[123]}}
     """
-    print(meter)
-    meter_return = {"status":False,"code":meter.code,"message":"识别"+meter.point+"成功","data":{"code":meter.code,"point":meter.point,"url":"D:/imgMeter/imgMeter.jpg","data":[1.2,3.4]}}
-    return ResponseReturn(status=True, code=meter_return['code'], message=meter_return["message"], data=meter_return["data"])
+    print("point_id:", point_id)
+    print("image_url:", image_url)
+    if point_id in meter_client.config.keys():
+        # meter_return = meter_client.get_meter_result_from_point(point_id,image_url)
+        meter_return = meter_client.get_meter_result_from_point("p1", "meter/2023-07-07_13_59_014.jpg")
+
+        print(meter_return)
+        # return ResponseModel(**meter_return)
+        return str(meter_return["data"])
+
+    else:
+        # return ResponseModel(status=False, code="/other/meter", message="point_id not found", data={})
+        return "55"
+
+
+@app.get("/other/test", summary="test", tags=["其他"])
+async def other_meter():
+    return "hello"
+
 
 """END
 # 其他 请求路径与方法
@@ -1857,6 +1971,8 @@ async def other_meter(meter:MeterBase) -> ResponseReturn:
 """
 # 以下为权限验证开关
 FlagCheckPermission = False
+
+
 # @app.middleware("http")
 async def check_authentication(request: Request, call_next):
     def check_permission(method, api, auth):
@@ -1873,21 +1989,24 @@ async def check_authentication(request: Request, call_next):
                     return True
                 else:
                     return False
+
     if FlagCheckPermission:
         auth = request.headers.get('token')
         if not check_permission(request.method, request.url.path, auth):
             return ItemResponseResult(status=False, code=2, message="该用户没有权限，或者token过期", data={})
     return await call_next(request)
 
+
 # 以下为允许客户端跨域设置
 from fastapi.middleware.cors import CORSMiddleware
-origins = ["http://localhost","*"]
+
+origins = ["http://localhost", "*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],# ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    allow_headers=["*"],# ["Authorization", "Content-Type", "token"]
+    allow_methods=["*"],  # ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allow_headers=["*"],  # ["Authorization", "Content-Type", "token"]
 )
 
 # 允许HTTPS的证书
