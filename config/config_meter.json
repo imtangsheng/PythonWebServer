@@ -1,0 +1,103 @@
+{
+    "api":"http://127.0.0.1:5016/api",
+
+    "0":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\":800,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":1.0,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "0.2-0.8",
+        "id":0
+    },
+    "回油温度表":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\":800,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":100.0,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "0-70",
+        "id":1
+    },
+    "进油压力表":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\":300,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":1.0,\"meter_scale\":0.01}],\"meter_angle\":0},{\"region_id\":2,\"top_left_x\":700,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":1.0,\"meter_scale\":0.01}],\"meter_angle\":0},{\"region_id\":3,\"top_left_x\":1100,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":1.0,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "0.4-0.6,0.4-0.6,0.4-0.6",
+        "id":4
+    },
+    "喷水压力表":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\":800,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":6.0,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "0-1",
+        "id":3
+    },
+    "高加温度表1":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\": 800,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":400.0,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "198-270",
+        "id":5
+    },
+    "高加温度表2":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\": 800,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":400.0,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "167-221",
+        "id":5
+    },
+    "高加温度表3":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\": 800,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":400.0,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "137-181",
+        "id":5
+    },
+    "高加温度表4":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\": 800,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":400.0,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "217-289",
+        "id":5
+    },
+
+    "高加温度表,回水压力表":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\": 800,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":60.0,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "0-40",
+        "id":5
+    },
+    "进回水温度表":{
+            "url":"/meter_recognize",
+            "image_url":"meter/2023-07-07_13_59_014.jpg",
+            "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\": 800,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":150.0,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+            "normalRange": "20-120",
+            "id":5
+    },
+    "汽泵,试验油压力表":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\":300,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":-0.1,\"measuring_range_end\":0.15,\"meter_scale\":0.01}],\"meter_angle\":0},{\"region_id\":2,\"top_left_x\":700,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":-0.1,\"measuring_range_end\":0.15,\"meter_scale\":0.01}],\"meter_angle\":0},{\"region_id\":3,\"top_left_x\":1100,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":1.6,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "0-0.08,0-0.08,0-1.2",
+        "id":6
+    },
+    "汽泵压力表":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\":300,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":-0.1,\"measuring_range_end\":0.15,\"meter_scale\":0.01}],\"meter_angle\":0},{\"region_id\":2,\"top_left_x\":700,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":-0.1,\"measuring_range_end\":0.15,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "0-0.08,0-0.08",
+        "id":6
+    },
+    "试验油压力表":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\":800,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":1.6,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "0-1.2",
+        "id":7
+    },
+    "温度表":{
+        "url":"/meter_recognize",
+        "image_url":"meter/2023-07-07_13_59_014.jpg",
+        "other_infor" : "{\"target_region\":[{\"region_id\":1,\"top_left_x\":800,\"top_left_y\":300,\"rect_width\": 600,\"rect_height\":600,\"scale_info\":[{\"measuring_range_begin\":0,\"measuring_range_end\":400.0,\"meter_scale\":0.01}],\"meter_angle\":0}]}",
+        "normalRange": "100-300",
+        "id":4
+    }
+}

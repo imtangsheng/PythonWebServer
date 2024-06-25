@@ -1,16 +1,18 @@
 {
+    "host": "0.0.0.0",
+    "port": 8000,
     "db": {
         "type": "json",
         "path": "config/db.json"
     },
     "log": {
         "level": "info",
-        "path": "test.txt",
-        "name": "test1",
+        "path": "D:/video/",
+        "name": "video",
         "videolog_file": "video.log"
     },
     "hikvision": [{
-        "ip":"192.168.1.36",
+        "ip":"10.148.193.247",
         "port": 8000,
         "user": "admin",
         "password": "dacang80",

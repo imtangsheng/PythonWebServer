@@ -15,8 +15,11 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
-from fastapi import FastAPI, Depends, status, Request, Response, HTTPException, Header, Body
+from fastapi import FastAPI, Depends, status, Request, Response, HTTPException, Header, Body,Form
 
+# current_path = "C:\\Users\\Public\\app\\pyApp\\dist"
+current_path = os.getcwd()
+config_path = os.path.join(current_path, "config/config.json")
 app_description = """
 # 机器人后端API说明
 
@@ -92,13 +95,13 @@ app.version = "0.2"
 
 class JsonDB:
     def __init__(self, db_path: str = "config/db.json"):
-        self.db_path = db_path
+        self.db_path = os.path.join(current_path,db_path)
 
     def load(self, file_path: str = None):
         if file_path is not None:
             self.db_path = file_path
         with open(self.db_path, encoding='utf-8', mode='r') as f:
-            data = json.load(f, encoding="utf-8")
+            data = json.load(f)
         return data
 
     def save(self, data: dict, file_path: str = None):
@@ -108,11 +111,9 @@ class JsonDB:
             json.dump(data, f, ensure_ascii=False, indent=4)
 
 
-ConfigAPP_path = "config/config.json"
-ConfigAPP = json.load(open(ConfigAPP_path, encoding='utf-8', mode='r'))
+ConfigAPP = json.load(open(config_path, encoding='utf-8', mode='r'))
 if ConfigAPP["db"]["type"] == "json":
     APP_JsonDB = JsonDB(ConfigAPP["db"]["path"])
-    print(ConfigAPP["db"]["path"])
     APP_DB = APP_JsonDB.load()
 
 elif ConfigAPP["db"]["type"] == "sqlite":
@@ -1869,7 +1870,7 @@ async def other_log_update_config(config=Body(embed=True)) -> ResponseReturn:
     if config:
         GLogSetting.update(config)
         # ConfigAPP["log"] = GLogSetting
-        with open(ConfigAPP_path, mode='w', encoding='utf-8') as f:
+        with open(config_path, mode='w', encoding='utf-8') as f:
             json.dump(ConfigAPP, f, ensure_ascii=False, indent=4)
         return ResponseReturn(status=True, code=0, message="Update log config success.", data={"config": GLogSetting})
     LastError.ERROR_TYPE = "LOG_CONFIG_ERROR"
@@ -1916,15 +1917,13 @@ async def other_error() -> ResponseReturn:
     - 返回：    
         - {"lasterror":LastError}
     """
-    return ResponseReturn(status=True, code=0, message="Success", data={"lasterror": GLastError})
+    return ResponseReturn(status=True, code=0, message="Success", data={"lasterror": LastError})
 
 
 from modules.method_meter import MeterHttpClient
 
 # 获取当前文件所在的目录
-current_dir = os.path.dirname(__file__)
-
-meter_config_path = os.path.join(current_dir, 'config', 'config_meter.json')
+meter_config_path = os.path.join(current_path, 'config', 'config_meter.json')
 
 meter_client = MeterHttpClient(meter_config_path)
 
@@ -1943,24 +1942,55 @@ async def other_meter(point_id: str, image_url: str):
         - 返回：
             - {"status":True,"code":0,"message":"Success","data":{"image_url":"http file path","result":[123]}}
     """
+    print("请求表计识别数据")
     print("point_id:", point_id)
     print("image_url:", image_url)
-    if point_id in meter_client.config.keys():
-        # meter_return = meter_client.get_meter_result_from_point(point_id,image_url)
-        meter_return = meter_client.get_meter_result_from_point("p1", "meter/2023-07-07_13_59_014.jpg")
+    data_return = meter_client.get_meter_result_from_point(point_id,image_url)
+    print(data_return)
+    str_return = {}
+    str_return["status"] = data_return["status"]
+    str_return["code"] = "/other/meter"
+    str_return["message"] = data_return["message"]
+    if str_return["status"]:
+        str_return["image_url"] = data_return["data"]["image_url"]
+        str_return['normalRange']= data_return['data']['normalRange']
+        str_return["data"] = ",".join(map(str, data_return["data"]["data"]))
 
-        print(meter_return)
-        # return ResponseModel(**meter_return)
-        return str(meter_return["data"])
+    return str_return
 
-    else:
-        # return ResponseModel(status=False, code="/other/meter", message="point_id not found", data={})
-        return "55"
+from fastapi.responses import FileResponse
+@app.get("/other/image/{file_path:path}", summary="图片文件下载预览", tags=["其他"])
+async def other_image_preview(file_path:str):
+    print("图片文件下载预览:",file_path)
+    return FileResponse(path=file_path,media_type="image/jpeg")
 
+@app.post("/other/test", summary="数据接收测试", tags=["视觉管理"])
+async def other_test_command(request:Request):
+    print("/other/test post")
+    print(await request.body())
+    return (await request.body())
 
-@app.get("/other/test", summary="test", tags=["其他"])
-async def other_meter():
-    return "hello"
+from fastapi.encoders import jsonable_encoder
+@app.post("/other/form", summary="数据接收测试", tags=["视觉管理"])
+async def other_form_command(data: dict = Depends(Form)):
+    print("/other/form post")
+    print(jsonable_encoder(data))
+    return ("test1")
+
+from modules.hkvision_alarm import get_alarm_data_by_bytes
+@app.post("/vision/a", summary="登录摄像头", tags=["视觉管理"])
+async def other_test_command(request:Request):
+    print("/vision/a post")
+    client_ip = request.client.host
+    print(client_ip)
+    print(request.headers)
+    #    print(request)
+    body = await request.body()
+    alarm = get_alarm_data_by_bytes(body)
+    for alarm_data_list in alarm['alarm_list']:
+        for alarm_data in alarm_data_list:
+            print(alarm_data["header"])
+            print(alarm_data["name"])
 
 
 """END
@@ -1993,7 +2023,7 @@ async def check_authentication(request: Request, call_next):
     if FlagCheckPermission:
         auth = request.headers.get('token')
         if not check_permission(request.method, request.url.path, auth):
-            return ItemResponseResult(status=False, code=2, message="该用户没有权限，或者token过期", data={})
+            return ResponseReturn(status=False, code=2, message="该用户没有权限，或者token过期", data={})
     return await call_next(request)
 
 

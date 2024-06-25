@@ -192,12 +192,13 @@ if __name__ == '__main__':
     import json
 
     # 获取当前文件所在的目录
-    current_dir = os.path.dirname(__file__)
-
+#     current_dir = os.path.dirname(__file__)
     # 拼接上级目录
-    parent_dir = os.path.dirname(current_dir)
-    config_path = os.path.join(parent_dir, 'config', 'config.json')
+#     parent_dir = os.path.dirname(current_dir)
+#     config_path = os.path.join(parent_dir, 'config', 'config.json')
 
+    current_path = os.getcwd()
+    config_path = os.path.join(current_path, "config/config.json")
     # 读取json配置
     with open(config_path, mode='r', encoding='utf-8') as f:
         config = json.load(f)
@@ -294,7 +295,16 @@ if __name__ == '__main__':
 
     # handler.namer = lambda name: name + ".log"
     # handler.namer = lambda name: name.replace(".log", "") + ".log"
-    handler.setLevel(logging.DEBUG)
+    # CRITICAL = 50
+    # FATAL = CRITICAL
+    # ERROR = 40
+    # WARNING = 30
+    # WARN = WARNING
+    # INFO = 20
+    # DEBUG = 10
+    # NOTSET = 0
+    LOG_LEVEL = {'info':20,'debug':logging.DEBUG,'warning':30,'error':40}
+    handler.setLevel(LOG_LEVEL.get(config['log']['level'],logging.DEBUG))
 
     handler.setFormatter(formatter)
     logger.addHandler(handler)

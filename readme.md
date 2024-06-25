@@ -170,3 +170,14 @@ pip install opencv-contrib-python -i https://mirrors.aliyun.com/pypi/simple/
 ```
 git config --global --add safe.directory "*"
 ```
+
+
+## 程序打包教程
+
+```   
+pyinstaller.exe --onefile --version-file file_version_info.txt --icon=logo.ico main.py
+
+pyinstaller.exe --onefile --version-file file_version_info.txt --icon=video.ico cv2capture.py
+
+```
+然后修改对应的文件
